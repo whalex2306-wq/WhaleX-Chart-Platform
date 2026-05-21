@@ -1,23 +1,23 @@
-# WhaleX Chart Platform v2.8 — Chart Resize Engine Fix
+# WhaleX Chart Platform v2.9 — Syntax Recovery + Resize Fix
 
 ## Why this build exists
 
-v2.7 still showed a blank/shifted chart in some browser sessions. The issue is the chart canvas size was not being updated correctly because the app used `applyOptions({width,height})` for resizing. Lightweight Charts needs `chart.resize(width, height)` for reliable canvas resizing.
+v2.8 had a JavaScript syntax issue in `app.js` around the safe fit/reset functions: `Unexpected token catch`. This stopped the front-end script, so the chart stayed blank even though the page loaded.
 
 ## Fixed
 
-- Replaced chart dimension updates with `chart.resize(width, height, true)`
-- Kept fallback to `applyOptions` only if resize is unavailable
-- Added stronger safe resize + fit cycles
-- Added visible logical range fallback after candle history loads
-- Improved deterministic chart/canvas minimum height
+- Removed the broken extra `catch` blocks
+- JavaScript syntax validated with `node --check`
+- Kept the v2.8 chart resize engine fix
+- Kept `chart.resize(width, height, true)`
+- Kept safe resize + fit cycles
 - Kept TV on-chart logo hidden
 - Kept WhaleX branding visible
 
 ## Shortcuts
 
 - R = reset chart view
-- F = fit/reset
+- F = fit/reset chart
 - M = maximize
 - E = edit drawings
 - Esc = chart move mode
@@ -29,4 +29,4 @@ v2.7 still showed a blank/shifted chart in some browser sessions. The issue is t
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.8.0`.
+Check `/health`; it must show version `2.9.0`.
