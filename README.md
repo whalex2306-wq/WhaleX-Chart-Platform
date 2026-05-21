@@ -1,38 +1,40 @@
-# WhaleX Chart Platform v2.5 — Chart Move Fix
+# WhaleX Chart Platform v2.6 — WhaleX Brand / No On-Chart TV Logo
 
-## Why this build exists
+## Main change
 
-In v2.4 the canvas drawing layer was always capturing mouse events, so the chart could feel fixed and dragging/panning stopped working.
+- Disabled the on-chart TradingView attribution logo from the Lightweight Charts renderer using `layout.attributionLogo = false`.
+- Added a small attribution note inside settings/about text instead of showing the TV mark on the chart.
+- Kept WhaleX logo/watermark as the visible chart branding.
 
-## Fixed
+## Important
 
-- Chart pan/drag works again by default
-- Canvas overlay is pass-through in normal chart move mode
-- Drawing overlay only captures mouse when:
-  - a drawing tool is active, or
-  - Select/Edit mode is active
-- Added separate tools:
-  - Hand = Chart move / pan mode
-  - Arrow = Select / edit drawing mode
-- Added shortcut:
-  - E = Select/Edit drawings
-  - Esc = back to chart move mode
+This is for Lightweight Charts only. TradingView Advanced Charts free usage requires TradingView attribution to remain visible unless a separate license allows otherwise.
 
-## Kept from v2.4
+## Kept from v2.5
 
-- Compact TradingView-style workflow
-- Max mode
-- Right panel hidden by default
-- Bottom table hidden by default
-- Drawing object tree
-- Lock / hide / clone / delete
+- Chart pan/drag works by default
+- Separate move mode and edit mode
+- Drawing tools:
+  - Horizontal line
+  - Trendline
+  - Ray
+  - Rectangle
+  - Fib
+  - Risk/Reward
+- Shortcuts:
+  - E = edit drawings
+  - Esc = move mode
+  - Delete = delete selected drawing
+  - Ctrl/Cmd+Z = undo
+  - M = maximize
+  - F = fit chart
 - OKX candle fallback
-- Bybit live liquidity lines
-- WhaleX logo/watermark
+- Bybit live liquidity
+- WhaleX chart UI and watermark
 
 ## Deploy
 
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.5.0`.
+Check `/health`; it must show version `2.6.0`.
