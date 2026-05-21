@@ -1,32 +1,45 @@
-# WhaleX Chart Platform v2.9 — Syntax Recovery + Resize Fix
+# WhaleX Chart Platform v2.10 — Full Height Chart Fix
 
 ## Why this build exists
 
-v2.8 had a JavaScript syntax issue in `app.js` around the safe fit/reset functions: `Unexpected token catch`. This stopped the front-end script, so the chart stayed blank even though the page loaded.
+The previous build rendered the chart only in the upper half of the page. The issue was CSS/grid sizing: the chart shell had `height:auto` with absolutely positioned chart content, so it did not stretch to the full remaining workspace height.
 
 ## Fixed
 
-- Removed the broken extra `catch` blocks
-- JavaScript syntax validated with `node --check`
-- Kept the v2.8 chart resize engine fix
-- Kept `chart.resize(width, height, true)`
-- Kept safe resize + fit cycles
-- Kept TV on-chart logo hidden
-- Kept WhaleX branding visible
+- Chart now uses full available workspace height
+- Chart grid rows changed to `minmax(0, 1fr)`
+- Workspace and chart area use stable full-height CSS grid
+- Chart shell now stretches with `height: calc(100% - 12px)`
+- Resize logic now reads `clientWidth/clientHeight`
+- ResizeObserver watches the chart shell and chart area
+- `chart.resize(width, height, true)` retained
+- TV on-chart logo remains hidden
+- WhaleX branding remains visible
 
-## Shortcuts
+## Kept
 
-- R = reset chart view
-- F = fit/reset chart
-- M = maximize
-- E = edit drawings
-- Esc = chart move mode
-- Delete = delete selected drawing
-- Ctrl/Cmd+Z = undo
+- Chart move/pan mode by default
+- Edit drawings mode
+- Horizontal line / Trendline / Ray / Rectangle / Fib / RR
+- OKX candle fallback
+- Bybit live liquidity
+- Shortcuts:
+  - R / F = reset-fit
+  - E = edit drawings
+  - Esc = move mode
+  - M = maximize
+  - Delete = delete selected
+  - Ctrl/Cmd+Z = undo
+
+## Syntax check
+
+JavaScript syntax check: PASS
+
+
 
 ## Deploy
 
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.9.0`.
+Check `/health`; it must show version `2.10.0`.
