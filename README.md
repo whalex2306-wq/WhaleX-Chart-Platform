@@ -1,31 +1,37 @@
-# WhaleX Chart Platform v2 — TradingView-like Tools + Logo
+# WhaleX Chart Platform v2.2 — TradingView UI + Real Drawing Overlay Tools
 
-## Added in v2
+## Main change
 
-- WhaleX logo in sidebar, top header, chart watermark and browser favicon
-- Top timeframe buttons
-- OHLC crosshair bar
-- Sidebar hide/show
-- Fullscreen button
-- Fit chart button
-- Drawing tools:
+The left info/settings panel has been removed. Best liquidity settings are hardcoded:
+
+- Bucket: 100
+- Minimum liquidity: 5M
+- Max lines: 10
+- Update speed: 750ms
+
+## Added / improved
+
+- TradingView-style top toolbar
+- TradingView-style left drawing toolbar
+- Chart type selector:
+  - Candles
+  - Heikin Ashi
+  - Bars
+  - Line
+  - Area
+- Real canvas overlay drawing tools:
   - Horizontal line
   - Trendline
-  - Fib levels
-- Drawings saved in browser localStorage per symbol
-- Basic liquidity wall toast alerts:
-  - Building wall
-  - Persistent wall
-
-## Still included
-
-- Candle history fallback:
-  - Bybit REST first
-  - OKX fallback if Bybit REST is blocked
-- Live Bybit order-book liquidity
-- Exact liquidity price lines
-- Liquidity age and behavior
-- Bid/ask liquidity tables
+  - Ray
+  - Rectangle zone
+  - Fib retracement
+  - Risk/Reward box
+- Drawings follow chart pan/zoom much better than v2 price-line-only tools
+- Drawings save in browser localStorage per symbol
+- Maximize mode hides right panel and bottom liquidity table
+- WhaleX logo + watermark retained
+- Existing OKX candle fallback retained
+- Existing Bybit live liquidity retained
 
 ## Deploy
 
