@@ -1,51 +1,38 @@
-# WhaleX Chart Platform v2.3 — TV Parity Foundation
+# WhaleX Chart Platform v2.5 — Chart Move Fix
 
-This version moves from a simple TradingView-style layout to a chart-first professional workspace.
+## Why this build exists
 
-## Key upgrades
+In v2.4 the canvas drawing layer was always capturing mouse events, so the chart could feel fixed and dragging/panning stopped working.
 
-- Chart-first layout by default
+## Fixed
+
+- Chart pan/drag works again by default
+- Canvas overlay is pass-through in normal chart move mode
+- Drawing overlay only captures mouse when:
+  - a drawing tool is active, or
+  - Select/Edit mode is active
+- Added separate tools:
+  - Hand = Chart move / pan mode
+  - Arrow = Select / edit drawing mode
+- Added shortcut:
+  - E = Select/Edit drawings
+  - Esc = back to chart move mode
+
+## Kept from v2.4
+
+- Compact TradingView-style workflow
+- Max mode
 - Right panel hidden by default
-- Bottom liquidity table hidden by default
-- Better maximize mode
-- Settings visibility toggles
-- Object tree panel
-- Select drawing
-- Drag/move drawing
-- Drag anchors
-- Delete selected drawing
-- Undo last drawing
-- Keyboard shortcuts:
-  - Esc = cursor / exit maximize
-  - Delete / Backspace = delete selected drawing
-  - Ctrl+Z / Cmd+Z = undo
-  - M = maximize
-  - F = fit chart
-
-## Tools improved
-
-- Horizontal line
-- Trendline
-- Ray
-- Rectangle zone
-- Fib retracement
-- Risk/reward box
-
-## Existing features retained
-
-- OKX candle fallback if Bybit candle history is blocked
-- Live Bybit liquidity lines
-- Bid / ask liquidity labels
-- Liquidity age and behavior
-- Chart type selector:
-  - Candles
-  - Heikin Ashi
-  - Bars
-  - Line
-  - Area
-- WhaleX logo and watermark
+- Bottom table hidden by default
+- Drawing object tree
+- Lock / hide / clone / delete
+- OKX candle fallback
+- Bybit live liquidity lines
+- WhaleX logo/watermark
 
 ## Deploy
 
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
+
+Check `/health`; it must show version `2.5.0`.
