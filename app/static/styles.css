@@ -100,3 +100,13 @@
 .settings-apply{background:#111827;color:#fff}
 .settings-reset{background:#e5e7eb;color:#111827}
 .selection-toolbar button.primary-mini{background:#111827;color:#fff}
+
+
+/* v2.13: tool plotting activation fix */
+body.mode-move #drawCanvas{pointer-events:none!important;cursor:grab!important}
+body.mode-edit #drawCanvas{pointer-events:auto!important;cursor:default!important}
+body.mode-draw #drawCanvas{pointer-events:auto!important;cursor:crosshair!important}
+body.mode-move .chartShell{cursor:grab}
+body.mode-draw .tool-tip{background:rgba(214,169,61,.95)!important;color:#111827!important;border-color:#fbbf24!important}
+body.mode-edit .tool-tip{background:rgba(59,130,246,.95)!important;color:#fff!important;border-color:#60a5fa!important}
+.left-tools .tool.active{outline:2px solid #f59e0b;outline-offset:1px}

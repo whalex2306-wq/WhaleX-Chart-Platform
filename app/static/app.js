@@ -121,7 +121,7 @@ function interval() {
 }
 
 function storageKey() {
-  return `whalex_drawings_v212_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
+  return `whalex_drawings_v213_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
 }
 
 function wsUrl() {
@@ -446,14 +446,37 @@ function setTool(t) {
   pendingPoints = [];
   hoverPoint = null;
   dragMode = null;
+
   const buttons = [els.cursorBtn, els.editBtn, els.hlineBtn, els.trendBtn, els.rayBtn, els.rectBtn, els.fibBtn, els.rrBtn].filter(Boolean);
   buttons.forEach(b => b.classList.remove("active"));
-  const map = { cursor: els.cursorBtn, edit: els.editBtn, hline: els.hlineBtn, trend: els.trendBtn, ray: els.rayBtn, rect: els.rectBtn, fib: els.fibBtn, rr: els.rrBtn };
+
+  const map = {
+    cursor: els.cursorBtn,
+    edit: els.editBtn,
+    hline: els.hlineBtn,
+    trend: els.trendBtn,
+    ray: els.rayBtn,
+    rect: els.rectBtn,
+    fib: els.fibBtn,
+    rr: els.rrBtn
+  };
   (map[t] || els.cursorBtn)?.classList.add("active");
-  shellEl.classList.toggle("drawing-active", !["cursor","edit"].includes(t));
+
+  const isDraw = !["cursor", "edit"].includes(t);
+  document.body.classList.toggle("mode-move", t === "cursor");
+  document.body.classList.toggle("mode-edit", t === "edit");
+  document.body.classList.toggle("mode-draw", isDraw);
+
+  shellEl.classList.toggle("drawing-active", isDraw);
   shellEl.classList.toggle("edit-active", t === "edit");
   shellEl.classList.toggle("select-mode", t === "edit");
-  if (els.toolTip) els.toolTip.textContent = t === "cursor" ? "Move / Pan" : t === "edit" ? "Select / Edit" : `Drawing: ${t}`;
+
+  if (els.toolTip) {
+    const label = t === "cursor" ? "Move / Pan" : t === "edit" ? "Select / Edit" : `Drawing: ${t} (${neededPoints(t)} click${neededPoints(t) > 1 ? "s" : ""})`;
+    els.toolTip.textContent = label;
+  }
+
+  toast(t === "cursor" ? "Move mode" : t === "edit" ? "Edit mode" : `${t.toUpperCase()} drawing mode`);
   drawOverlay();
 }
 
@@ -1028,11 +1051,22 @@ window.addEventListener("mouseup", () => {
 
 canvas.addEventListener("click", e => {
   if (activeTool === "cursor" || activeTool === "edit") return;
+
   const p = xyToPoint(e);
-  if (!p) return;
+  if (!p) {
+    toast("Chart not ready for drawing. Press R, then try again.");
+    return;
+  }
+
   pendingPoints.push({ time:p.time, price:p.price });
-  if (pendingPoints.length >= neededPoints(activeTool)) addDrawing([...pendingPoints]);
-  else toast(`${activeTool}: select point ${pendingPoints.length + 1}`);
+
+  if (pendingPoints.length >= neededPoints(activeTool)) {
+    addDrawing([...pendingPoints]);
+    setTool("edit");
+    toast("Drawing added. Drag anchors or open Settings.");
+  } else {
+    toast(`${activeTool.toUpperCase()}: click point ${pendingPoints.length + 1} of ${neededPoints(activeTool)}`);
+  }
   drawOverlay();
 });
 
@@ -1231,6 +1265,7 @@ document.addEventListener("keydown", e => {
 
 makeSeries("candles");
 setTool("cursor");
+document.body.classList.add("mode-move");
 safeResize();
 connect();
 setTimeout(resetChartView, 900);
