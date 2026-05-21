@@ -1,38 +1,51 @@
-# WhaleX Chart Platform v2.2 — TradingView UI + Real Drawing Overlay Tools
+# WhaleX Chart Platform v2.3 — TV Parity Foundation
 
-## Main change
+This version moves from a simple TradingView-style layout to a chart-first professional workspace.
 
-The left info/settings panel has been removed. Best liquidity settings are hardcoded:
+## Key upgrades
 
-- Bucket: 100
-- Minimum liquidity: 5M
-- Max lines: 10
-- Update speed: 750ms
+- Chart-first layout by default
+- Right panel hidden by default
+- Bottom liquidity table hidden by default
+- Better maximize mode
+- Settings visibility toggles
+- Object tree panel
+- Select drawing
+- Drag/move drawing
+- Drag anchors
+- Delete selected drawing
+- Undo last drawing
+- Keyboard shortcuts:
+  - Esc = cursor / exit maximize
+  - Delete / Backspace = delete selected drawing
+  - Ctrl+Z / Cmd+Z = undo
+  - M = maximize
+  - F = fit chart
 
-## Added / improved
+## Tools improved
 
-- TradingView-style top toolbar
-- TradingView-style left drawing toolbar
+- Horizontal line
+- Trendline
+- Ray
+- Rectangle zone
+- Fib retracement
+- Risk/reward box
+
+## Existing features retained
+
+- OKX candle fallback if Bybit candle history is blocked
+- Live Bybit liquidity lines
+- Bid / ask liquidity labels
+- Liquidity age and behavior
 - Chart type selector:
   - Candles
   - Heikin Ashi
   - Bars
   - Line
   - Area
-- Real canvas overlay drawing tools:
-  - Horizontal line
-  - Trendline
-  - Ray
-  - Rectangle zone
-  - Fib retracement
-  - Risk/Reward box
-- Drawings follow chart pan/zoom much better than v2 price-line-only tools
-- Drawings save in browser localStorage per symbol
-- Maximize mode hides right panel and bottom liquidity table
-- WhaleX logo + watermark retained
-- Existing OKX candle fallback retained
-- Existing Bybit live liquidity retained
+- WhaleX logo and watermark
 
 ## Deploy
 
-Upload this full project over your existing `WhaleX-Chart-Platform` GitHub repo, commit, then Render → Manual Deploy → Deploy latest commit.
+Upload all files over the existing GitHub repo, commit, then Render:
+Manual Deploy -> Clear build cache & deploy.

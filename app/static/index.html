@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>WhaleX Chart Platform v2.2</title>
+  <title>WhaleX Chart Platform v2.3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="/static/whalex-logo.png" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <div class="tv-shell" id="shell">
+  <div class="tv-shell focus-mode" id="shell">
     <header class="topbar">
       <div class="brand-mini">
         <img src="/static/whalex-logo.png" alt="WhaleX" />
@@ -42,30 +42,32 @@
       <button id="alertBtn" class="top-btn">Alerts</button>
       <button id="settingsBtn" class="top-btn">⚙</button>
       <button id="fitBtn" class="top-btn">Fit</button>
-      <button id="maxBtn" class="top-btn">Maximize</button>
+      <button id="maxBtn" class="top-btn">Max</button>
+      <button id="panelBtn" class="top-btn">Panels</button>
       <button id="connectBtn" class="top-btn primary">Reconnect</button>
+      <span class="live-pill" id="status">Connecting</span>
     </header>
 
     <div class="workspace">
       <aside class="left-tools">
-        <button id="cursorBtn" class="tool active" title="Cursor">↖</button>
+        <button id="cursorBtn" class="tool active" title="Cursor / Select">↖</button>
         <button id="hlineBtn" class="tool" title="Horizontal Line">━</button>
         <button id="trendBtn" class="tool" title="Trendline">╱</button>
         <button id="rayBtn" class="tool" title="Ray">➚</button>
         <button id="rectBtn" class="tool" title="Rectangle Zone">▭</button>
         <button id="fibBtn" class="tool" title="Fib Retracement">F</button>
         <button id="rrBtn" class="tool" title="Risk Reward">RR</button>
-        <button id="clearDrawingsBtn" class="tool danger" title="Clear drawings">⌫</button>
+        <button id="undoBtn" class="tool" title="Undo last">↶</button>
+        <button id="deleteBtn" class="tool danger" title="Delete selected">⌫</button>
       </aside>
 
       <main class="chart-area">
-        <div class="title-row">
+        <div class="title-row" id="titleRow">
           <div>
             <h1 id="title">BTCUSDT · Bybit Liquidity</h1>
-            <p id="subtitle">TradingView-style layout · Hardcoded liquidity settings: Bucket 100 · Min 5M · Max 10</p>
+            <p id="subtitle">TV-parity foundation · Defaults: Bucket 100 · Min 5M · Max 10</p>
           </div>
           <div class="source-pills">
-            <span id="status">Connecting</span>
             <span id="historySource">Candles: loading</span>
             <span id="liqSource">Liquidity: Bybit</span>
           </div>
@@ -78,15 +80,17 @@
           <span>C <b id="cVal">—</b></span>
           <span>V <b id="vVal">—</b></span>
           <span>Mid <b id="mid">—</b></span>
+          <span class="hint">Esc cursor · Del delete · Ctrl+Z undo · M max · F fit</span>
         </div>
 
         <section class="chartShell" id="chartShell">
           <div id="chart"></div>
           <canvas id="drawCanvas"></canvas>
           <img class="chart-watermark" id="watermark" src="/static/whalex-logo.png" alt="WhaleX watermark" />
+          <div class="tool-tip" id="toolTip">Cursor</div>
         </section>
 
-        <section class="bottom-panel" id="bottomPanel">
+        <section class="bottom-panel hidden" id="bottomPanel">
           <div class="tableCard">
             <h3>Ask Liquidity</h3>
             <table><thead><tr><th>Price</th><th>Liquidity</th><th>Age</th><th>Behavior</th></tr></thead><tbody id="askRows"></tbody></table>
@@ -98,13 +102,17 @@
         </section>
       </main>
 
-      <aside class="right-panel">
+      <aside class="right-panel hidden" id="rightPanel">
         <div class="panel-card">
           <h3>Watchlist</h3>
           <button class="watch active" data-symbol="BTCUSDT">BTCUSDT</button>
           <button class="watch" data-symbol="ETHUSDT">ETHUSDT</button>
           <button class="watch" data-symbol="SOLUSDT">SOLUSDT</button>
           <button class="watch" data-symbol="XRPUSDT">XRPUSDT</button>
+        </div>
+        <div class="panel-card">
+          <h3>Object Tree</h3>
+          <div id="objectTree" class="object-tree"></div>
         </div>
         <div class="panel-card">
           <h3>Market</h3>
@@ -124,8 +132,10 @@
       <label><input id="showBids" type="checkbox" checked /> Show bid liquidity</label>
       <label><input id="showAsks" type="checkbox" checked /> Show ask liquidity</label>
       <label><input id="showWatermark" type="checkbox" checked /> Show WhaleX watermark</label>
-      <label><input id="showBottomPanel" type="checkbox" checked /> Show liquidity table</label>
-      <p>Best settings are hardcoded for clean view. Next build can add saved user profiles.</p>
+      <label><input id="showBottomPanel" type="checkbox" /> Show liquidity table</label>
+      <label><input id="showRightPanel" type="checkbox" /> Show right panel</label>
+      <label><input id="showTitleRow" type="checkbox" checked /> Show title/source row</label>
+      <p>Defaults stay hardcoded for a clean chart-first view. These toggles only control visibility.</p>
     </div>
   </div>
 
