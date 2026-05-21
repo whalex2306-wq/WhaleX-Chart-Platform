@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>WhaleX Chart Platform v2.11</title>
+  <title>WhaleX Chart Platform v2.12</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="/static/whalex-logo.png" />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -67,7 +67,7 @@
         <div class="title-row hidden" id="titleRow">
           <div>
             <h1 id="title">BTCUSDT · Bybit Liquidity</h1>
-            <p id="subtitle">WhaleX branded chart · syntax + resize fixed · Defaults: Bucket 100 · Min 5M · Max 10</p>
+            <p id="subtitle">WhaleX branded chart · tool settings engine</p>
           </div>
           <div class="source-pills">
             <span id="historySource">Candles: loading</span>
@@ -96,6 +96,7 @@
             <button id="selLock">Lock</button>
             <button id="selHide">Hide</button>
             <button id="selClone">Clone</button>
+            <button id="selSettings">Settings</button>
             <button id="selMoveMode">Move Mode</button>
           </div>
         </section>
@@ -147,6 +148,28 @@
       <label><input id="showTitleRow" type="checkbox" /> Show title/source row</label>
       <p>Clean defaults are hardcoded. This panel only controls visibility so the chart stays focused.</p>
       <p class="attribution-note">Chart rendering uses Lightweight Charts™. WhaleX adds its own liquidity, tools and branding.</p>
+    </div>
+  </div>
+
+  <div id="drawingSettingsModal" class="modal hidden">
+    <div class="modal-card tool-settings-card">
+      <div class="modal-head">
+        <h2 id="drawingSettingsTitle">Drawing Settings</h2>
+        <button id="closeDrawingSettings">×</button>
+      </div>
+
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="style">Style</button>
+        <button class="settings-tab" data-tab="text">Text/Labels</button>
+        <button class="settings-tab" data-tab="coords">Coordinates</button>
+      </div>
+
+      <div id="settingsBody" class="settings-body"></div>
+
+      <div class="settings-actions">
+        <button id="applyDrawingSettings" class="settings-apply">Apply</button>
+        <button id="resetDrawingSettings" class="settings-reset">Reset</button>
+      </div>
     </div>
   </div>
 

@@ -1,29 +1,78 @@
-# WhaleX Chart Platform v2.11 — Flex Layout Fix
+# WhaleX Chart Platform v2.12 — TV-Style Tool Settings Engine
 
-## Why this build exists
+## Main goal
 
-The previous versions still showed the chart only in the top part of the screen. The root cause was CSS grid row sizing fighting the chart library resize timing.
+Start matching the TradingView-style workflow for drawing tool settings, without copying TradingView private code or branding.
 
-## Fixed properly
+## Added in v2.12
 
-- Replaced the chart workspace sizing with a flex layout override
-- Chart area now fills the complete available screen height
-- Chart shell is `flex: 1` and takes remaining height
-- Chart/canvas are absolute full-size inside the shell
-- Resize logic now reads the final chart shell bounding box
-- Added repeated reset/resize after page load
-- JavaScript syntax validated
+### Selected-object toolbar
+- Delete
+- Lock / unlock
+- Hide / show
+- Clone
+- Settings
 
-## Kept
+### Settings modal
+Tabs:
+- Style
+- Text / Labels
+- Coordinates
 
+### Fib settings
+- Level controls
+- Enable/disable individual levels
+- Level values
+- Level labels
+- Level colors
+- Line color
+- Line width
+- Line style
+- Background fill
+- Fill opacity
+- Extend lines
+- Label side
+- Show/hide labels
+
+### Trendline / Ray settings
+- Color
+- Width
+- Style: solid / dashed / dotted
+- Extend left
+- Extend right
+- Show labels
+
+### Horizontal line settings
+- Color
+- Width
+- Style
+- Show labels / price
+
+### Rectangle settings
+- Border color
+- Fill color
+- Fill opacity
+- Width
+- Style
+
+### Risk/Reward settings
+- Long / short mode placeholder
+- Profit color
+- Loss color
+- Fill opacity
+- Show RR
+- Account size
+- Risk %
+
+## Kept stable from v2.11
+
+- Full-height chart layout
 - TV on-chart logo hidden
-- WhaleX branding visible
-- Chart move/pan mode by default
+- WhaleX branding
+- Chart move/pan by default
 - Edit drawings mode
-- Liquidity lines
 - OKX candle fallback
-- Bybit live liquidity
-- Drawing tools
+- Bybit live liquidity lines
 
 ## Syntax check
 
@@ -36,4 +85,4 @@ JavaScript syntax check: PASS
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.11.0`.
+Check `/health`; it must show version `2.12.0`.
