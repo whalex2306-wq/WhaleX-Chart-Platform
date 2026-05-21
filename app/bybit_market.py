@@ -1,10 +1,10 @@
 from __future__ import annotations
 import asyncio, json, time
 from typing import AsyncGenerator, Dict, Optional, List
-import httpx, websockets
+import websockets
 from .liquidity import LiquidityMemory, bucket_orderbook, line_to_dict
+from .candle_history import fetch_candles_with_fallback
 BYBIT_WS = 'wss://stream.bybit.com/v5/public/linear'
-BYBIT_REST = 'https://api.bybit.com'
 INTERVAL_MAP = {'1':'1','3':'3','5':'5','15':'15','30':'30','60':'60','120':'120','240':'240','D':'D'}
 
 class BybitMarketStream:
@@ -15,17 +15,9 @@ class BybitMarketStream:
         self.publish_ms = max(250, int(publish_ms))
         self.book: Dict[str, Dict[float, float]] = {'bid': {}, 'ask': {}}
         self.bid_memory = LiquidityMemory(); self.ask_memory = LiquidityMemory()
-        self.latest_candle: Optional[dict] = None; self.best_bid: Optional[float] = None; self.best_ask: Optional[float] = None
-    async def fetch_initial_candles(self, limit=500) -> List[dict]:
-        params = {'category':'linear','symbol':self.symbol,'interval':self.interval,'limit':str(limit)}
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.get(f'{BYBIT_REST}/v5/market/kline', params=params); r.raise_for_status(); data = r.json()
-        candles=[]
-        for row in data.get('result', {}).get('list', []) or []:
-            try:
-                candles.append({'time': int(int(row[0])/1000), 'open': float(row[1]), 'high': float(row[2]), 'low': float(row[3]), 'close': float(row[4]), 'volume': float(row[5])})
-            except Exception: pass
-        candles.sort(key=lambda x: x['time']); return candles
+        self.latest_candle: Optional[dict] = None; self.best_bid: Optional[float] = None; self.best_ask: Optional[float] = None; self.history_source = 'loading'
+    async def fetch_initial_candles(self, limit=500):
+        return await fetch_candles_with_fallback(self.symbol, self.interval, limit)
     def apply_orderbook(self, msg: dict) -> None:
         data = msg.get('data', {}) or {}; msg_type = msg.get('type')
         if msg_type == 'snapshot': self.book['bid'].clear(); self.book['ask'].clear()
@@ -52,18 +44,19 @@ class BybitMarketStream:
         bid_lines = self.bid_memory.update('bid', bid_raw, self.min_m, self.max_lines)
         ask_lines = self.ask_memory.update('ask', ask_raw, self.min_m, self.max_lines)
         mid = (self.best_bid + self.best_ask)/2.0 if self.best_bid is not None and self.best_ask is not None else None
-        return {'type':'liquidity','exchange':'bybit','symbol':self.symbol,'ready':bool(self.book['bid'] and self.book['ask']),'ts':int(time.time()*1000),'mid':mid,'best_bid':self.best_bid,'best_ask':self.best_ask,'bid_lines':[line_to_dict(x) for x in bid_lines],'ask_lines':[line_to_dict(x) for x in ask_lines]}
+        return {'type':'liquidity','exchange':'Bybit order book','history_source':self.history_source,'symbol':self.symbol,'ready':bool(self.book['bid'] and self.book['ask']),'ts':int(time.time()*1000),'mid':mid,'best_bid':self.best_bid,'best_ask':self.best_ask,'bid_lines':[line_to_dict(x) for x in bid_lines],'ask_lines':[line_to_dict(x) for x in ask_lines]}
     async def stream(self) -> AsyncGenerator[dict, None]:
         try:
-            candles = await self.fetch_initial_candles()
-            yield {'type':'candles','symbol':self.symbol,'interval':self.interval,'candles':candles}
+            candles, source, warning = await self.fetch_initial_candles()
+            self.history_source = source
+            yield {'type':'candles','symbol':self.symbol,'interval':self.interval,'history_source':source,'warning':warning,'candles':candles}
         except Exception as e:
             yield {'type':'status','status':'initial candles unavailable','error':str(e)}
         subscribe = {'op':'subscribe','args':[f'kline.{self.interval}.{self.symbol}', f'orderbook.{self.depth}.{self.symbol}']}
         while True:
             try:
                 async with websockets.connect(BYBIT_WS, ping_interval=20, ping_timeout=20, close_timeout=5) as ws:
-                    await ws.send(json.dumps(subscribe)); yield {'type':'status','status':'connected','exchange':'bybit','symbol':self.symbol}
+                    await ws.send(json.dumps(subscribe)); yield {'type':'status','status':'connected','exchange':'Bybit order book','symbol':self.symbol,'history_source':self.history_source}
                     last_publish = 0.0
                     async for raw in ws:
                         try: msg = json.loads(raw)
@@ -71,12 +64,12 @@ class BybitMarketStream:
                         topic = msg.get('topic','')
                         if topic.startswith('kline.'):
                             candle = self.update_candle(msg)
-                            if candle: yield {'type':'candle','symbol':self.symbol,'interval':self.interval,'candle':candle}
+                            if candle: yield {'type':'candle','symbol':self.symbol,'interval':self.interval,'history_source':self.history_source,'candle':candle}
                         elif topic.startswith('orderbook.'):
                             self.apply_orderbook(msg); now = time.time()*1000.0
                             if now - last_publish >= self.publish_ms:
                                 last_publish = now; yield self.build_liquidity_payload()
             except asyncio.CancelledError: raise
             except Exception as e:
-                yield {'type':'status','status':'reconnecting','error':str(e),'exchange':'bybit'}
+                yield {'type':'status','status':'reconnecting','error':str(e),'exchange':'Bybit order book','history_source':self.history_source}
                 await asyncio.sleep(3)
