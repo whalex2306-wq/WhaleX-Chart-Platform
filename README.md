@@ -1,49 +1,32 @@
-# WhaleX Chart Platform v2.7 — Chart Render + Fit Fix
+# WhaleX Chart Platform v2.8 — Chart Resize Engine Fix
 
 ## Why this build exists
 
-v2.6 removed the on-chart TV logo, but on some browser/session sizes the chart could render only at the top strip or look blank because the chart was initialized before the final container size was stable.
+v2.7 still showed a blank/shifted chart in some browser sessions. The issue is the chart canvas size was not being updated correctly because the app used `applyOptions({width,height})` for resizing. Lightweight Charts needs `chart.resize(width, height)` for reliable canvas resizing.
 
 ## Fixed
 
-- Robust chart resize after layout loads
-- ResizeObserver added for chart container
-- Safe delayed resize + fit after candle history loads
-- Reset view shortcut added:
-  - R = reset chart view
-  - F = fit/reset chart
-- Chart container height/width made deterministic
-- Canvas overlay remains pass-through in normal chart move mode
-- TV on-chart logo remains hidden
-- WhaleX branding remains visible
+- Replaced chart dimension updates with `chart.resize(width, height, true)`
+- Kept fallback to `applyOptions` only if resize is unavailable
+- Added stronger safe resize + fit cycles
+- Added visible logical range fallback after candle history loads
+- Improved deterministic chart/canvas minimum height
+- Kept TV on-chart logo hidden
+- Kept WhaleX branding visible
 
-## Kept from v2.6
+## Shortcuts
 
-- Chart pan/drag works by default
-- Hand = move mode
-- Arrow = edit drawings
-- Drawing tools:
-  - Horizontal line
-  - Trendline
-  - Ray
-  - Rectangle
-  - Fib
-  - Risk/Reward
-- Shortcuts:
-  - E = edit drawings
-  - Esc = move mode
-  - Delete = delete selected drawing
-  - Ctrl/Cmd+Z = undo
-  - M = maximize
-  - F = fit/reset
-  - R = reset view
-- OKX candle fallback
-- Bybit live liquidity
-- WhaleX logo/watermark
+- R = reset chart view
+- F = fit/reset
+- M = maximize
+- E = edit drawings
+- Esc = chart move mode
+- Delete = delete selected drawing
+- Ctrl/Cmd+Z = undo
 
 ## Deploy
 
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.7.0`.
+Check `/health`; it must show version `2.8.0`.
