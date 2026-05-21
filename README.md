@@ -1,19 +1,27 @@
-# WhaleX Chart Platform v2.6 — WhaleX Brand / No On-Chart TV Logo
+# WhaleX Chart Platform v2.7 — Chart Render + Fit Fix
 
-## Main change
+## Why this build exists
 
-- Disabled the on-chart TradingView attribution logo from the Lightweight Charts renderer using `layout.attributionLogo = false`.
-- Added a small attribution note inside settings/about text instead of showing the TV mark on the chart.
-- Kept WhaleX logo/watermark as the visible chart branding.
+v2.6 removed the on-chart TV logo, but on some browser/session sizes the chart could render only at the top strip or look blank because the chart was initialized before the final container size was stable.
 
-## Important
+## Fixed
 
-This is for Lightweight Charts only. TradingView Advanced Charts free usage requires TradingView attribution to remain visible unless a separate license allows otherwise.
+- Robust chart resize after layout loads
+- ResizeObserver added for chart container
+- Safe delayed resize + fit after candle history loads
+- Reset view shortcut added:
+  - R = reset chart view
+  - F = fit/reset chart
+- Chart container height/width made deterministic
+- Canvas overlay remains pass-through in normal chart move mode
+- TV on-chart logo remains hidden
+- WhaleX branding remains visible
 
-## Kept from v2.5
+## Kept from v2.6
 
 - Chart pan/drag works by default
-- Separate move mode and edit mode
+- Hand = move mode
+- Arrow = edit drawings
 - Drawing tools:
   - Horizontal line
   - Trendline
@@ -27,14 +35,15 @@ This is for Lightweight Charts only. TradingView Advanced Charts free usage requ
   - Delete = delete selected drawing
   - Ctrl/Cmd+Z = undo
   - M = maximize
-  - F = fit chart
+  - F = fit/reset
+  - R = reset view
 - OKX candle fallback
 - Bybit live liquidity
-- WhaleX chart UI and watermark
+- WhaleX logo/watermark
 
 ## Deploy
 
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.6.0`.
+Check `/health`; it must show version `2.7.0`.
