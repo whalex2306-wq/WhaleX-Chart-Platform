@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: whalex-chart-platform
+    env: docker
+    plan: free
+    autoDeploy: true
