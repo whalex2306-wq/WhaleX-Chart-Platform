@@ -1,7 +1,63 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>WhaleX Chart Platform MVP</title><meta name="viewport" content="width=device-width,initial-scale=1"/><link rel="stylesheet" href="/static/styles.css"/></head><body>
-<div class="app"><aside class="sidebar"><div class="brand"><div class="logo">🐋</div><div><h1>WhaleX Chart</h1><p>Live liquidity + candles</p></div></div>
-<div class="panel"><label>Symbol<input id="symbol" value="BTCUSDT"/></label><label>Timeframe<select id="interval"><option value="1">1m</option><option value="3">3m</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">1H</option><option value="240">4H</option></select></label><div class="grid"><label>Bucket<input id="bucket" type="number" value="100" min="1"/></label><label>Min M<input id="minM" type="number" value="5" step="0.5" min="0"/></label></div><div class="grid"><label>Max lines<input id="maxLines" type="number" value="10" min="1" max="50"/></label><label>Update ms<input id="publishMs" type="number" value="750" min="250"/></label></div><label class="check"><input id="showBids" type="checkbox" checked/><span>Show bid liquidity</span></label><label class="check"><input id="showAsks" type="checkbox" checked/><span>Show ask liquidity</span></label><button id="connectBtn">Reconnect</button></div>
-<div class="panel statusPanel"><div class="stat"><span>Status</span><strong id="status">Disconnected</strong></div><div class="stat"><span>Candles</span><strong id="historySource">—</strong></div><div class="stat"><span>Liquidity</span><strong id="liqSource">Bybit</strong></div><div class="stat"><span>Mid</span><strong id="mid">—</strong></div><div class="stat"><span>Best Bid</span><strong id="bestBid">—</strong></div><div class="stat"><span>Best Ask</span><strong id="bestAsk">—</strong></div></div>
-<div class="panel"><h2>Roadmap</h2><ul class="roadmap"><li>v1.1: candle history fallback</li><li>v2: drawing tools + alerts</li><li>v3: WhaleX Orderflow engine</li><li>v4: saved layouts + login</li></ul></div></aside>
-<main class="main"><header class="topbar"><div><h2 id="title">BTCUSDT · Bybit USDT Perp</h2><p id="subtitle">Candles with fallback history + exact live liquidity lines</p></div><div class="legend"><span class="dot bid"></span> Bid liquidity <span class="dot ask"></span> Ask liquidity</div></header><section class="chartShell"><div id="chart"></div></section><section class="tables"><div class="tableCard"><h3>Top Ask Liquidity</h3><table><thead><tr><th>Price</th><th>Liquidity</th><th>Age</th><th>Behavior</th></tr></thead><tbody id="askRows"></tbody></table></div><div class="tableCard"><h3>Top Bid Liquidity</h3><table><thead><tr><th>Price</th><th>Liquidity</th><th>Age</th><th>Behavior</th></tr></thead><tbody id="bidRows"></tbody></table></div></section></main></div>
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script><script src="/static/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WhaleX Chart Platform v2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/static/whalex-logo.png" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <img class="brand-logo" src="/static/whalex-logo.png" alt="WhaleX" />
+        <div><h1>WhaleX Chart</h1><p>Liquidity + tools</p></div>
+      </div>
+
+      <div class="panel">
+        <label>Symbol<input id="symbol" value="BTCUSDT" /></label>
+        <label>Timeframe
+          <select id="interval">
+            <option value="1">1m</option><option value="3">3m</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">1H</option><option value="240">4H</option>
+          </select>
+        </label>
+        <div class="grid"><label>Bucket<input id="bucket" type="number" value="100" min="1" /></label><label>Min M<input id="minM" type="number" value="5" step="0.5" min="0" /></label></div>
+        <div class="grid"><label>Max lines<input id="maxLines" type="number" value="10" min="1" max="50" /></label><label>Update ms<input id="publishMs" type="number" value="750" min="250" /></label></div>
+        <label class="check"><input id="showBids" type="checkbox" checked /><span>Show bid liquidity</span></label>
+        <label class="check"><input id="showAsks" type="checkbox" checked /><span>Show ask liquidity</span></label>
+        <button id="connectBtn">Reconnect</button>
+      </div>
+
+      <div class="panel statusPanel">
+        <div class="stat"><span>Status</span><strong id="status">Disconnected</strong></div>
+        <div class="stat"><span>Candles</span><strong id="historySource">—</strong></div>
+        <div class="stat"><span>Liquidity</span><strong id="liqSource">Bybit</strong></div>
+        <div class="stat"><span>Mid</span><strong id="mid">—</strong></div>
+        <div class="stat"><span>Best Bid</span><strong id="bestBid">—</strong></div>
+        <div class="stat"><span>Best Ask</span><strong id="bestAsk">—</strong></div>
+      </div>
+
+      <div class="panel"><h2>Drawings</h2><p class="mini">Drawings are saved in this browser per symbol.</p><button id="clearDrawingsBtn" class="danger">Clear drawings</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-left"><button id="toggleSidebarBtn" class="ghost">☰</button><img class="top-logo" src="/static/whalex-logo.png" alt="WhaleX" /><div><h2 id="title">BTCUSDT · Bybit Liquidity</h2><p id="subtitle">TradingView-like MVP: candles, liquidity, drawings, alerts</p></div></div>
+        <div class="tfbar" id="tfbar"><button data-tf="1">1m</button><button data-tf="3">3m</button><button data-tf="5">5m</button><button data-tf="15">15m</button><button data-tf="30">30m</button><button data-tf="60">1H</button><button data-tf="240">4H</button></div>
+        <div class="tools"><button id="cursorBtn" class="tool active">Cursor</button><button id="hlineBtn" class="tool">H-Line</button><button id="trendBtn" class="tool">Trend</button><button id="fibBtn" class="tool">Fib</button><button id="fitBtn">Fit</button><button id="fullBtn">Full</button></div>
+      </header>
+
+      <div class="ohlcbar" id="ohlcbar"><span>O <b id="oVal">—</b></span><span>H <b id="hVal">—</b></span><span>L <b id="lVal">—</b></span><span>C <b id="cVal">—</b></span><span>V <b id="vVal">—</b></span></div>
+      <section class="chartShell" id="chartShell"><div id="chart"></div><img class="chart-watermark" src="/static/whalex-logo.png" alt="WhaleX watermark" /></section>
+      <section class="tables">
+        <div class="tableCard"><h3>Top Ask Liquidity</h3><table><thead><tr><th>Price</th><th>Liquidity</th><th>Age</th><th>Behavior</th></tr></thead><tbody id="askRows"></tbody></table></div>
+        <div class="tableCard"><h3>Top Bid Liquidity</h3><table><thead><tr><th>Price</th><th>Liquidity</th><th>Age</th><th>Behavior</th></tr></thead><tbody id="bidRows"></tbody></table></div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

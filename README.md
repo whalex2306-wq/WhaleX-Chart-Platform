@@ -1,14 +1,31 @@
-# WhaleX Chart Platform MVP v1.1
+# WhaleX Chart Platform v2 — TradingView-like Tools + Logo
 
-This version fixes missing candle history on Render by adding a fallback candle-history source.
+## Added in v2
 
-## What changed
+- WhaleX logo in sidebar, top header, chart watermark and browser favicon
+- Top timeframe buttons
+- OHLC crosshair bar
+- Sidebar hide/show
+- Fullscreen button
+- Fit chart button
+- Drawing tools:
+  - Horizontal line
+  - Trendline
+  - Fib levels
+- Drawings saved in browser localStorage per symbol
+- Basic liquidity wall toast alerts:
+  - Building wall
+  - Persistent wall
 
-- Bybit REST candle history first.
-- If Bybit REST is blocked with 403, fallback to OKX swap candle history.
-- Live Bybit WebSocket candles/order book continue running.
-- Dashboard shows candle source and liquidity source.
-- Liquidity lines still come from Bybit order book.
+## Still included
+
+- Candle history fallback:
+  - Bybit REST first
+  - OKX fallback if Bybit REST is blocked
+- Live Bybit order-book liquidity
+- Exact liquidity price lines
+- Liquidity age and behavior
+- Bid/ask liquidity tables
 
 ## Deploy
 
