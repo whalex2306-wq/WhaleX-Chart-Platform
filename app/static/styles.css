@@ -2,3 +2,81 @@
 .attribution-note{font-size:11px!important;color:#6b7280!important;border-top:1px solid #e5e7eb;margin-top:12px!important;padding-top:10px!important}
 
 .loading-note{position:absolute;z-index:7;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(17,24,39,.85);border:1px solid #334155;border-radius:10px;padding:10px 14px;color:#cbd5e1;font-size:13px;pointer-events:none}.loading-note.hidden{display:none}
+
+
+/* v2.11: hard override to stop half-screen chart bug.
+   The earlier CSS grid rows were fighting browser layout timing.
+   This flex layout makes the chart shell take 100% of remaining height. */
+.tv-shell{
+  height:100vh !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow:hidden !important;
+}
+.topbar{
+  flex:0 0 44px !important;
+}
+.workspace{
+  flex:1 1 auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  display:grid !important;
+  grid-template-columns:46px minmax(0,1fr) 0 !important;
+  overflow:hidden !important;
+}
+.workspace.panels-open{
+  grid-template-columns:46px minmax(0,1fr) 245px !important;
+}
+.left-tools{
+  min-height:0 !important;
+  overflow-y:auto !important;
+}
+.chart-area{
+  display:flex !important;
+  flex-direction:column !important;
+  height:100% !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+}
+.chart-area .title-row{
+  flex:0 0 56px !important;
+}
+.chart-area.title-hidden .title-row,
+.title-row.hidden{
+  display:none !important;
+}
+.ohlcbar{
+  flex:0 0 30px !important;
+}
+.chartShell{
+  flex:1 1 auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  margin:6px 8px !important;
+  position:relative !important;
+}
+.bottom-panel{
+  flex:0 0 150px !important;
+}
+.bottom-panel.hidden{
+  display:none !important;
+}
+.right-panel.hidden{
+  display:none !important;
+}
+#chart,
+#drawCanvas{
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+}
+.tv-shell.max-mode .workspace{
+  grid-template-columns:46px minmax(0,1fr) 0 !important;
+}
+.tv-shell.max-mode .title-row,
+.tv-shell.max-mode .right-panel,
+.tv-shell.max-mode .bottom-panel{
+  display:none !important;
+}
