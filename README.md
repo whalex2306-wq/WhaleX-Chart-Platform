@@ -1,53 +1,46 @@
-# WhaleX Chart Platform v2.15 — Tool Templates
+# WhaleX Chart Platform v2.17 — Drawing Behavior Polish
 
 ## Main goal
 
-Allow users to save their own templates for each drawing tool, like a TradingView-style workflow.
+Polish the drawing workflow before moving to indicators/orderflow.
 
-## Added
+## Added / improved
 
-### Per-tool templates
+### Selection behavior
+- Floating selected-object toolbar now follows the selected drawing instead of staying fixed.
+- Double-click any drawing in Edit mode to open its Settings.
+- Better selected drawing bounds handling.
+- Drag cursor feedback while moving/editing drawings.
 
-Templates are saved separately for each tool:
+### Settings behavior
+- Settings now apply live as you change inputs.
+- Color, width, style, labels, Fib levels, RR labels update without repeatedly pressing Apply.
+- Apply button remains available as a manual confirmation option.
 
-- Fib
-- Trendline
-- Ray
-- Horizontal Line
-- Rectangle
-- Risk/Reward
+### Risk/Reward polish
+- RR labels now show Long/Short mode in the Entry label.
+- TP/SL/RR labels are cleaner.
 
-### Template actions
+### Kept from v2.16
+- Fib plots only from Point A to Point B by default.
+- No “TV Defaults” button.
+- Tool templates remain available.
+- Full Fib level list remains available.
+- Tool plotting fix remains.
+- Full-height chart remains stable.
+- TV on-chart logo remains hidden.
+- WhaleX branding remains visible.
+- OKX candle fallback and Bybit live liquidity remain.
 
-Inside Drawing Settings:
+## Suggested test flow
 
-- Save Current
-- Apply Template
-- Set Default
-- Delete Template
-
-### Default templates
-
-If a user sets a template as default for a tool:
-
-- New Fib drawings use default Fib template
-- New TL drawings use default TL template
-- New RR drawings use default RR template
-- etc.
-
-### Storage
-
-Templates are saved in browser localStorage, so they survive refresh on the same browser/device.
-
-## Kept
-
-- v2.14 TV-style Fib full settings
-- v2.13 tool plotting activation fix
-- Full-height stable chart
-- TV on-chart logo hidden
-- WhaleX branding visible
-- OKX candle fallback
-- Bybit live liquidity
+1. Draw Fib.
+2. Press E.
+3. Click Fib.
+4. Double-click Fib or click Settings.
+5. Change color/levels/labels.
+6. Confirm changes apply live.
+7. Save as template and set default.
 
 ## Syntax check
 
@@ -60,4 +53,4 @@ JavaScript syntax check: PASS
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.15.0`.
+Check `/health`; it must show version `2.17.0`.

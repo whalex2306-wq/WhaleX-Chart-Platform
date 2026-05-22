@@ -209,3 +209,26 @@ body.mode-edit .tool-tip{background:rgba(59,130,246,.95)!important;color:#fff!im
   color:#6b7280;
   font-size:12px;
 }
+
+
+/* v2.17: drawing behavior polish */
+.selection-toolbar{
+  transition:left .08s linear, top .08s linear;
+}
+.selection-toolbar button.settings-strong,
+#selSettings{
+  background:#111827!important;
+  color:#fff!important;
+}
+.tool-tip{
+  user-select:none;
+}
+.anchor-hover{
+  cursor:grab!important;
+}
+body.mode-edit #drawCanvas{
+  cursor:default!important;
+}
+body.mode-edit #drawCanvas.dragging{
+  cursor:grabbing!important;
+}

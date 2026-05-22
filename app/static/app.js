@@ -69,7 +69,6 @@ const els = {
   applyDrawingSettings: document.getElementById("applyDrawingSettings"),
   resetDrawingSettings: document.getElementById("resetDrawingSettings"),
   addFibLevel: document.getElementById("addFibLevel"),
-  restoreFibDefaults: document.getElementById("restoreFibDefaults"),
   templateName: document.getElementById("templateName"),
   templateSelect: document.getElementById("templateSelect"),
   saveTemplateBtn: document.getElementById("saveTemplateBtn"),
@@ -130,7 +129,7 @@ function interval() {
 }
 
 function storageKey() {
-  return `whalex_drawings_v215_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
+  return `whalex_drawings_v216_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
 }
 
 function wsUrl() {
@@ -402,9 +401,10 @@ function defaultStyle(type) {
     textColor: "#ffffff",
     background: true,
     fillOpacity: 6,
-    extendLines: true,
+    extendLines: false,
     extendLeft: false,
-    extendRight: true,
+    extendRight: false,
+    fibSpanMode: "pointToPoint",
     labelSide: "right",
     reverse: false,
     showLevelValue: true,
@@ -435,6 +435,15 @@ function normalizeDrawing(d) {
   if (d.type === "fib") {
     const def = defaultStyle("fib").levels;
     if (!Array.isArray(d.settings.levels)) d.settings.levels = def;
+
+    // v2.16: default/migrate Fib to point A → point B, not full-screen.
+    if (d.settings.fibSpanMode === undefined) {
+      d.settings.fibSpanMode = "pointToPoint";
+      d.settings.extendLines = false;
+      d.settings.extendLeft = false;
+      d.settings.extendRight = false;
+    }
+
     d.settings.levels = d.settings.levels.map((l, i) => ({
       on: l.on !== false,
       value: Number(l.value ?? def[i]?.value ?? 0),
@@ -592,6 +601,26 @@ function selectedDrawing() {
   return drawings.find(x => x.id === selectedId);
 }
 
+function drawingScreenBounds(d) {
+  if (!d || !Array.isArray(d.points) || !d.points.length) return null;
+  const pts = d.points.map(pointToXY).filter(p => p.x != null && p.y != null);
+  if (!pts.length) return null;
+
+  if (d.type === "fib") {
+    const x1 = pToX(d.points[0]), x2 = pToX(d.points[1]);
+    if (x1 != null && x2 != null) {
+      const low = Math.min(d.points[0].price, d.points[1].price);
+      const high = Math.max(d.points[0].price, d.points[1].price);
+      const y1 = pToY({ price: low });
+      const y2 = pToY({ price: high });
+      if (y1 != null && y2 != null) pts.push({ x: Math.min(x1,x2), y: Math.min(y1,y2) }, { x: Math.max(x1,x2), y: Math.max(y1,y2) });
+    }
+  }
+
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+}
+
 function updateSelectionToolbar() {
   if (!els.selectionToolbar) return;
   const d = selectedDrawing();
@@ -599,6 +628,15 @@ function updateSelectionToolbar() {
   if (d) {
     if (els.selLock) els.selLock.textContent = d.locked ? "Unlock" : "Lock";
     if (els.selHide) els.selHide.textContent = d.hidden ? "Show" : "Hide";
+
+    const b = drawingScreenBounds(d);
+    if (b) {
+      const chartW = canvas.clientWidth || 800;
+      const x = Math.max(10, Math.min(chartW - 330, b.left + 8));
+      const y = Math.max(10, b.top - 42);
+      els.selectionToolbar.style.left = `${x}px`;
+      els.selectionToolbar.style.top = `${y}px`;
+    }
   }
 }
 
@@ -844,8 +882,10 @@ function drawFib(d,sel=false) {
 
   const leftBase = Math.min(x1,x2);
   const rightBase = Math.max(x1,x2);
-  const left = s.extendLines && s.extendLeft ? 0 : leftBase;
-  const right = s.extendLines && s.extendRight ? canvas.clientWidth : rightBase;
+
+  // Default: plot only from point A to point B. Extend only when user enables it.
+  const left = (s.extendLines && s.extendLeft) ? 0 : leftBase;
+  const right = (s.extendLines && s.extendRight) ? canvas.clientWidth : rightBase;
   const activeLevels = (s.levels || []).filter(l => l.on).sort((a,b)=>Number(a.value)-Number(b.value));
 
   if (s.background && activeLevels.length > 1) {
@@ -900,8 +940,9 @@ function drawRR(d,sel=false) {
   ctx.restore();
   const risk=Math.abs(entry.price-stop.price), reward=Math.abs(target.price-entry.price), rr=risk>0?(reward/risk).toFixed(2):"—";
   if (s.showLabels) {
-    drawLabel(`Entry ${fmtPrice(entry.price)}`,right-135,ye,"#111827");
-    drawLabel(`TP ${fmtPrice(target.price)}${s.showRR ? " RR "+rr : ""}`,right-150,yt,"#15803d");
+    const mode = (s.mode || "long").toUpperCase();
+    drawLabel(`${mode} Entry ${fmtPrice(entry.price)}`,right-170,ye,"#111827");
+    drawLabel(`TP ${fmtPrice(target.price)}${s.showRR ? "  RR "+rr : ""}`,right-160,yt,"#15803d");
     drawLabel(`SL ${fmtPrice(stop.price)}`,right-135,ys,"#991b1b");
   }
   if (sel) { anchor(xe,ye,true); anchor(xt,yt,true); anchor(pToX(stop),ys,true); }
@@ -1113,7 +1154,7 @@ function renderDrawingSettings() {
       html += settingRow("Reverse Fib", `<input data-set="reverse" type="checkbox" ${s.reverse ? "checked" : ""}>`);
       html += settingRow("Background", `<input data-set="background" type="checkbox" ${s.background ? "checked" : ""}>`);
       html += settingRow("Fill opacity", `<input data-set="fillOpacity" type="number" min="0" max="50" value="${s.fillOpacity ?? 6}">`);
-      html += settingRow("Extend lines", `<input data-set="extendLines" type="checkbox" ${s.extendLines ? "checked" : ""}>`);
+      html += settingRow("Extend beyond A-B", `<input data-set="extendLines" type="checkbox" ${s.extendLines ? "checked" : ""}>`);
       html += settingRow("Extend left", `<input data-set="extendLeft" type="checkbox" ${s.extendLeft ? "checked" : ""}>`);
       html += settingRow("Extend right", `<input data-set="extendRight" type="checkbox" ${s.extendRight ? "checked" : ""}>`);
       html += settingRow("Label side", `<select data-set="labelSide"><option value="right">Right</option><option value="left">Left</option></select>`);
@@ -1183,6 +1224,8 @@ function renderDrawingSettings() {
     const val = s.levels?.[idx]?.[field];
     if (val !== undefined) sel.value = val;
   });
+
+  bindLiveSettingsEvents();
 }
 
 function applySettingsFromModal() {
@@ -1223,6 +1266,18 @@ function applySettingsFromModal() {
 
   saveDrawings();
   drawOverlay();
+}
+
+function bindLiveSettingsEvents() {
+  if (!els.settingsBody) return;
+  els.settingsBody.querySelectorAll("input, select").forEach(el => {
+    const evt = (el.type === "text" || el.type === "number") ? "input" : "change";
+    el.addEventListener(evt, () => {
+      applySettingsFromModal();
+      drawOverlay();
+      renderObjectTree();
+    });
+  });
 }
 
 function openDrawingSettings() {
@@ -1279,6 +1334,7 @@ canvas.addEventListener("mousemove", e => {
   if (!p) return;
 
   if (activeTool === "edit" && dragMode) {
+    canvas.classList.add("dragging");
     const d = drawings.find(x => x.id === dragMode.id);
     if (!d) return;
     if (dragMode.kind === "anchor") setAnchor(d,dragMode.idx,p.x,p.y);
@@ -1300,7 +1356,9 @@ canvas.addEventListener("mousemove", e => {
 });
 
 window.addEventListener("mouseup", () => {
+  canvas.classList.remove("dragging");
   if (dragMode) {
+    canvas.classList.remove("dragging");
     saveDrawings();
     dragMode = null;
     dragStart = null;
@@ -1333,6 +1391,21 @@ canvas.addEventListener("mouseleave", () => {
   hoverPoint = null;
   if (!dragMode) drawOverlay();
 });
+
+
+canvas.addEventListener("dblclick", e => {
+  const p = xyToPoint(e);
+  if (!p) return;
+  const h = hitTest(p.x, p.y);
+  if (h) {
+    selectedId = h.d.id;
+    setTool("edit");
+    renderObjectTree();
+    drawOverlay();
+    openDrawingSettings();
+  }
+});
+
 
 /* ---------- Data connection ---------- */
 
@@ -1478,14 +1551,6 @@ if (els.addFibLevel) els.addFibLevel.onclick = () => {
   if (!d || d.type !== "fib") return;
   normalizeDrawing(d);
   d.settings.levels.push({ on:true, value:0, label:"custom", color:d.settings.color || "#a78bfa", width:1, lineStyle:"solid" });
-  saveDrawings();
-  renderDrawingSettings();
-  drawOverlay();
-};
-if (els.restoreFibDefaults) els.restoreFibDefaults.onclick = () => {
-  const d = selectedDrawing();
-  if (!d || d.type !== "fib") return;
-  d.settings.levels = tvFibLevels();
   saveDrawings();
   renderDrawingSettings();
   drawOverlay();
