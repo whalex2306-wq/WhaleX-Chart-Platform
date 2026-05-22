@@ -1,73 +1,66 @@
-# WhaleX Chart Platform v2.20 — RR 1:1 + Drag All Tools
+# WhaleX Chart Platform v2.22 — Forced RR One-Click
 
-## Main goal
+## Main fix
 
-Fix the Long/Short position tool behavior and make every plotted tool draggable like TradingView.
+Long Position / Short Position is now forced to plot on the first pointer click.
 
-## Long / Short position behavior
+This does not wait for the old multi-click drawing flow.
+
+## Behavior
 
 ### Long Position
-
-- 1st click = Entry
-- 2nd click = Target
-- Stop is auto-created below Entry at equal distance
+- Select Long Position
+- Click once on chart
+- Entry is placed exactly where clicked
+- Target auto-created above Entry
+- Stop auto-created below Entry
 - Default RR = 1:1
-- User can drag Entry / Target / Stop after placement
+- User can drag Entry / Target / Stop
 
 ### Short Position
-
-- 1st click = Entry
-- 2nd click = Target
-- Stop is auto-created above Entry at equal distance
+- Select Short Position
+- Click once on chart
+- Entry is placed exactly where clicked
+- Target auto-created below Entry
+- Stop auto-created above Entry
 - Default RR = 1:1
-- User can drag Entry / Target / Stop after placement
+- User can drag Entry / Target / Stop
 
-## Drag behavior
+## Technical fix
 
-In Edit mode:
-
-- Click/drag anchors to resize/edit
-- Click/drag the body of the plotted object to move the full tool
-- Works for:
-  - Fib
-  - Trendline
-  - Ray
-  - Horizontal Line
-  - Rectangle
-  - Long Position
-  - Short Position
+- Long/Short now plot on `pointerdown` using capture mode
+- A fallback click handler is also kept
+- Old multi-click pending flow is bypassed for Long/Short
+- Added robust chart coordinate fallback so clicking near future/blank chart area still creates the tool
 
 ## Kept
 
-- v2.19 TV-style left toolbar flyout
-- v2.18 draggable floating toolbar
-- Quick style/template popovers
-- Tool templates for all tools
-- v2.16 Fib point A to Point B behavior
-- Full-height stable chart
+- Drag-any-tool behavior
+- TV-style left toolbar flyout
+- Draggable floating toolbar
+- Tool templates
+- Fib point A to Point B
+- Full-height chart
 - TV on-chart logo hidden
 - WhaleX branding visible
-- OKX candle fallback
-- Bybit live liquidity
 
-## Test flow
+## Test
 
-1. Click RR/Forecasting icon on the left toolbar.
+1. Click RR/Forecasting icon.
 2. Select Long Position.
-3. Click Entry, then Target.
-4. Confirm Stop appears automatically at 1:1.
-5. Press E and drag Entry / Target / Stop.
-6. Drag the body of the position box to move the full tool.
-
-## Deploy
-
-Upload all files over the existing GitHub repo, commit, then Render:
-Manual Deploy -> Clear build cache & deploy.
-
-Check `/health`; it must show version `2.20.0`.
+3. Click once on the chart.
+4. The position box must appear immediately.
+5. Repeat with Short Position.
 
 ## Syntax check
 
 JavaScript syntax check: PASS
 
 
+
+## Deploy
+
+Upload all files over the existing GitHub repo, commit, then Render:
+Manual Deploy -> Clear build cache & deploy.
+
+Check `/health`; it must show version `2.22.0`.

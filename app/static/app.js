@@ -167,7 +167,7 @@ function interval() {
 }
 
 function storageKey() {
-  return `whalex_drawings_v220_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
+  return `whalex_drawings_v222_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
 }
 
 function wsUrl() {
@@ -521,11 +521,53 @@ function pToY(p) { return mainSeries?.priceToCoordinate(p.price); }
 function xToTime(x) { return chart.timeScale().coordinateToTime(x); }
 function yToPrice(y) { return mainSeries?.coordinateToPrice(y); }
 
+function intervalSecondsValue() {
+  const tf = interval();
+  const n = parseInt(tf, 10);
+  if (tf === "1D" || tf === "D") return 86400;
+  if (tf === "1W" || tf === "W") return 604800;
+  if (Number.isFinite(n)) return n * 60;
+  return 60;
+}
+
+function fallbackTimeFromX(x) {
+  let t = xToTime(x);
+  if (t !== null && t !== undefined) return t;
+
+  try {
+    const logical = chart.timeScale().coordinateToLogical(x);
+    if (logical !== null && logical !== undefined && rawCandles.length) {
+      const idx = Math.round(logical);
+      const sec = intervalSecondsValue();
+
+      if (idx >= 0 && idx < rawCandles.length) return rawCandles[idx].time;
+
+      const lastIdx = rawCandles.length - 1;
+      const lastTime = rawCandles[lastIdx].time;
+      return lastTime + Math.round(idx - lastIdx) * sec;
+    }
+  } catch(e) {}
+
+  return rawCandles.length ? rawCandles[rawCandles.length - 1].time : Math.floor(Date.now() / 1000);
+}
+
+function fallbackPriceFromY(y) {
+  let price = yToPrice(y);
+  if (Number.isFinite(price)) return price;
+
+  const last = rawCandles.length ? rawCandles[rawCandles.length - 1] : null;
+  if (last && Number.isFinite(last.close)) return last.close;
+  if (lastLiquidity && Number.isFinite(lastLiquidity.mid)) return lastLiquidity.mid;
+  return 0;
+}
+
 function xyToPoint(e) {
   const r = canvas.getBoundingClientRect();
-  const x = e.clientX - r.left, y = e.clientY - r.top;
-  const time = xToTime(x), price = yToPrice(y);
-  if (time === null || !Number.isFinite(price)) return null;
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  const time = fallbackTimeFromX(x);
+  const price = fallbackPriceFromY(y);
+  if (time === null || time === undefined || !Number.isFinite(price)) return null;
   return { time, price, x, y };
 }
 
@@ -538,9 +580,7 @@ function dist(a,b,c,d) {
 }
 
 function neededPoints(t) {
-  // Long/Short position works like TV default workflow here:
-  // click Entry, click Target, Stop is auto-created at 1:1 and can be dragged later.
-  return t === "hline" ? 1 : t === "rr" ? 3 : (t === "longpos" || t === "shortpos") ? 2 : 2;
+  return t === "hline" ? 1 : t === "rr" ? 3 : (t === "longpos" || t === "shortpos") ? 1 : 2;
 }
 
 function setTool(t) {
@@ -578,7 +618,7 @@ function setTool(t) {
   shellEl.classList.toggle("select-mode", t === "edit");
 
   if (els.toolTip) {
-    const label = t === "cursor" ? "Move / Pan" : t === "edit" ? "Select / Edit" : `Drawing: ${t === "longpos" ? "Long Position 1:1" : t === "shortpos" ? "Short Position 1:1" : t} (${neededPoints(t)} click${neededPoints(t) > 1 ? "s" : ""})`;
+    const label = t === "cursor" ? "Move / Pan" : t === "edit" ? "Select / Edit" : `Drawing: ${t === "longpos" ? "Long Position ONE CLICK 1:1" : t === "shortpos" ? "Short Position ONE CLICK 1:1" : t} (${neededPoints(t)} click${neededPoints(t) > 1 ? "s" : ""})`;
     els.toolTip.textContent = label;
   }
 
@@ -843,6 +883,48 @@ function updateSelectionToolbar() {
   }
 }
 
+function positionAutoPoints(rawTool, entry) {
+  const isShort = rawTool === "shortpos";
+
+  // Use roughly 80px above/below entry so default box looks natural across zoom levels.
+  // Fallback to 0.5% if coordinate conversion is not available.
+  let targetPrice, stopPrice;
+  const pxRisk = 80;
+
+  if (entry.y !== undefined && Number.isFinite(entry.y)) {
+    const above = yToPrice(entry.y - pxRisk);
+    const below = yToPrice(entry.y + pxRisk);
+
+    if (Number.isFinite(above) && Number.isFinite(below)) {
+      if (isShort) {
+        targetPrice = below;
+        stopPrice = above;
+      } else {
+        targetPrice = above;
+        stopPrice = below;
+      }
+    }
+  }
+
+  if (!Number.isFinite(targetPrice) || !Number.isFinite(stopPrice)) {
+    const risk = Math.max(1, Math.abs(entry.price) * 0.005);
+    if (isShort) {
+      targetPrice = entry.price - risk;
+      stopPrice = entry.price + risk;
+    } else {
+      targetPrice = entry.price + risk;
+      stopPrice = entry.price - risk;
+    }
+  }
+
+  // Same time anchor gives a clean vertical position tool, with box extending right by drawing logic.
+  return [
+    { time: entry.time, price: entry.price },
+    { time: entry.time, price: targetPrice },
+    { time: entry.time, price: stopPrice }
+  ];
+}
+
 function addDrawing(points) {
   const rawTool = activeTool;
   const isPosition = rawTool === "longpos" || rawTool === "shortpos";
@@ -850,25 +932,10 @@ function addDrawing(points) {
 
   let finalPoints = [...points];
 
-  // v2.20: Long/Short default is 1:1.
-  // User clicks Entry + Target only. Stop is auto-created equal distance on the other side.
-  if (isPosition && points.length >= 2) {
-    const entry = points[0];
-    const target = points[1];
-    const reward = Math.abs(target.price - entry.price);
-
-    let stopPrice;
-    if (rawTool === "longpos") {
-      stopPrice = entry.price - reward;
-    } else {
-      stopPrice = entry.price + reward;
-    }
-
-    finalPoints = [
-      entry,
-      target,
-      { time: target.time, price: stopPrice }
-    ];
+  // v2.21: one-click Long/Short position.
+  // User clicks Entry only. Target and Stop are auto-created at default 1:1.
+  if (isPosition && points.length >= 1) {
+    finalPoints = positionAutoPoints(rawTool, points[0]);
   }
 
   let d = normalizeDrawing({
@@ -1581,6 +1648,41 @@ function resetSelectedDrawingSettings() {
 
 /* ---------- Canvas events ---------- */
 
+let suppressNextPositionClick = false;
+
+function isPositionTool(t = activeTool) {
+  return t === "longpos" || t === "shortpos";
+}
+
+function placePositionOneClick(e) {
+  if (!isPositionTool()) return false;
+
+  const toolBefore = activeTool;
+  const p = xyToPoint(e);
+  if (!p) {
+    toast("Chart not ready for position tool. Press R and try again.");
+    return true;
+  }
+
+  addDrawing([{ time:p.time, price:p.price, x:p.x, y:p.y }]);
+  setTool("edit");
+  toast(`${toolBefore === "shortpos" ? "Short" : "Long"} Position plotted in one click at 1:1. Drag Entry/Target/Stop to adjust.`);
+  suppressNextPositionClick = true;
+  return true;
+}
+
+// v2.22: Force Long/Short to plot on pointerdown, not after a multi-click flow.
+canvas.addEventListener("pointerdown", e => {
+  if (isPositionTool()) {
+    const done = placePositionOneClick(e);
+    if (done) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+}, true);
+
+
 canvas.addEventListener("mousedown", e => {
   const p = xyToPoint(e);
   if (!p) return;
@@ -1646,7 +1748,18 @@ window.addEventListener("mouseup", () => {
 });
 
 canvas.addEventListener("click", e => {
+  if (suppressNextPositionClick) {
+    suppressNextPositionClick = false;
+    return;
+  }
+
   if (activeTool === "cursor" || activeTool === "edit") return;
+
+  // Safety fallback: if pointerdown was blocked by browser, click still plots Long/Short immediately.
+  if (isPositionTool()) {
+    placePositionOneClick(e);
+    return;
+  }
 
   const p = xyToPoint(e);
   if (!p) {
@@ -1654,17 +1767,14 @@ canvas.addEventListener("click", e => {
     return;
   }
 
-  pendingPoints.push({ time:p.time, price:p.price });
+  pendingPoints.push({ time:p.time, price:p.price, x:p.x, y:p.y });
 
   if (pendingPoints.length >= neededPoints(activeTool)) {
     addDrawing([...pendingPoints]);
     setTool("edit");
-    toast(activeTool === "longpos" || activeTool === "shortpos" ? "Position added at 1:1. Drag Entry/Target/Stop to adjust." : "Drawing added. Drag anchors or open Settings.");
+    toast("Drawing added. Drag anchors or open Settings.");
   } else {
-    const toolName = activeTool === "longpos" ? "LONG" : activeTool === "shortpos" ? "SHORT" : activeTool.toUpperCase();
-    const pointName = (activeTool === "longpos" || activeTool === "shortpos") ? ["Entry","Target"][pendingPoints.length] : `point ${pendingPoints.length + 1}`;
-    const extra = (activeTool === "longpos" || activeTool === "shortpos") ? " · Stop auto 1:1" : "";
-    toast(`${toolName}: click ${pointName} of ${neededPoints(activeTool)}${extra}`);
+    toast(`${activeTool.toUpperCase()}: click point ${pendingPoints.length + 1} of ${neededPoints(activeTool)}`);
   }
   drawOverlay();
 });
