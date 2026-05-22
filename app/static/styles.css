@@ -110,3 +110,102 @@ body.mode-move .chartShell{cursor:grab}
 body.mode-draw .tool-tip{background:rgba(214,169,61,.95)!important;color:#111827!important;border-color:#fbbf24!important}
 body.mode-edit .tool-tip{background:rgba(59,130,246,.95)!important;color:#fff!important;border-color:#60a5fa!important}
 .left-tools .tool.active{outline:2px solid #f59e0b;outline-offset:1px}
+
+
+/* v2.14: TV-style Fib full settings */
+.tool-settings-card{width:680px!important}
+.fib-action{display:none}
+.tool-settings-card.fib-open .fib-action{display:inline-block}
+.fib-level-grid{
+  display:grid;
+  gap:6px;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  padding:10px;
+  background:#f9fafb;
+  max-height:330px;
+  overflow:auto;
+}
+.fib-level-head,
+.fib-level-row{
+  display:grid;
+  grid-template-columns:32px 74px 92px 46px 62px 58px 36px;
+  gap:7px;
+  align-items:center;
+}
+.fib-level-head{
+  font-size:11px;
+  color:#6b7280;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.fib-level-row input,
+.fib-level-row select{
+  min-width:0;
+  height:30px!important;
+  font-size:12px;
+}
+.fib-level-row input[type="checkbox"]{height:auto!important}
+.setting-section-title{
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  color:#6b7280;
+  font-weight:900;
+  margin-top:6px;
+}
+
+
+/* v2.15: Tool template UI */
+.template-box{
+  margin-top:14px;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  padding:12px;
+  background:#f9fafb;
+}
+.template-title{
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  color:#374151;
+  font-weight:900;
+  margin-bottom:9px;
+}
+.template-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-bottom:8px;
+}
+.template-grid input,
+.template-grid select{
+  height:34px;
+  border:1px solid #d1d5db;
+  border-radius:8px;
+  padding:0 9px;
+  background:#fff;
+  color:#111827;
+}
+.template-actions{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.template-actions button{
+  border:0;
+  border-radius:7px;
+  padding:7px 9px;
+  font-weight:900;
+  cursor:pointer;
+  background:#111827;
+  color:#fff;
+}
+.template-actions button:nth-child(4){
+  background:#ef4444;
+}
+.template-note{
+  margin-top:8px;
+  color:#6b7280;
+  font-size:12px;
+}

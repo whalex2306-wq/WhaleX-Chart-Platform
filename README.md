@@ -1,34 +1,53 @@
-# WhaleX Chart Platform v2.13 — Tool Plot Activation Fix
+# WhaleX Chart Platform v2.15 — Tool Templates
 
-## Why this build exists
+## Main goal
 
-v2.12 added drawing settings, but tool plotting could fail because the drawing canvas layer was not reliably switching mouse/pointer mode.
+Allow users to save their own templates for each drawing tool, like a TradingView-style workflow.
 
-## Fixed
+## Added
 
-- Added clear app modes:
-  - Move mode
-  - Edit mode
-  - Draw mode
-- Drawing canvas is active only in Draw/Edit mode
-- Normal chart pan/move stays active in Move mode
-- Clicking a tool now shows a clear tooltip:
-  - Drawing: fib (2 clicks)
-  - Drawing: trend (2 clicks)
-  - Drawing: hline (1 click)
-  - Drawing: rr (3 clicks)
-- After drawing completes, it automatically switches to Edit mode
-- Added clearer toast messages while selecting points
-- Kept v2.12 tool settings panel
+### Per-tool templates
 
-## Tool click counts
+Templates are saved separately for each tool:
 
-- H-Line: 1 click
-- Trendline: 2 clicks
-- Ray: 2 clicks
-- Rectangle: 2 clicks
-- Fib: 2 clicks
-- RR: 3 clicks
+- Fib
+- Trendline
+- Ray
+- Horizontal Line
+- Rectangle
+- Risk/Reward
+
+### Template actions
+
+Inside Drawing Settings:
+
+- Save Current
+- Apply Template
+- Set Default
+- Delete Template
+
+### Default templates
+
+If a user sets a template as default for a tool:
+
+- New Fib drawings use default Fib template
+- New TL drawings use default TL template
+- New RR drawings use default RR template
+- etc.
+
+### Storage
+
+Templates are saved in browser localStorage, so they survive refresh on the same browser/device.
+
+## Kept
+
+- v2.14 TV-style Fib full settings
+- v2.13 tool plotting activation fix
+- Full-height stable chart
+- TV on-chart logo hidden
+- WhaleX branding visible
+- OKX candle fallback
+- Bybit live liquidity
 
 ## Syntax check
 
@@ -41,4 +60,4 @@ JavaScript syntax check: PASS
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.13.0`.
+Check `/health`; it must show version `2.15.0`.

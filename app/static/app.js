@@ -67,7 +67,16 @@ const els = {
   drawingSettingsTitle: document.getElementById("drawingSettingsTitle"),
   settingsBody: document.getElementById("settingsBody"),
   applyDrawingSettings: document.getElementById("applyDrawingSettings"),
-  resetDrawingSettings: document.getElementById("resetDrawingSettings")
+  resetDrawingSettings: document.getElementById("resetDrawingSettings"),
+  addFibLevel: document.getElementById("addFibLevel"),
+  restoreFibDefaults: document.getElementById("restoreFibDefaults"),
+  templateName: document.getElementById("templateName"),
+  templateSelect: document.getElementById("templateSelect"),
+  saveTemplateBtn: document.getElementById("saveTemplateBtn"),
+  applyTemplateBtn: document.getElementById("applyTemplateBtn"),
+  setDefaultTemplateBtn: document.getElementById("setDefaultTemplateBtn"),
+  deleteTemplateBtn: document.getElementById("deleteTemplateBtn"),
+  templateNote: document.getElementById("templateNote")
 };
 
 const chartEl = document.getElementById("chart");
@@ -121,7 +130,7 @@ function interval() {
 }
 
 function storageKey() {
-  return `whalex_drawings_v213_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
+  return `whalex_drawings_v215_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
 }
 
 function wsUrl() {
@@ -339,17 +348,53 @@ function renderRows(tbody, rows, side) {
 
 /* ---------- Drawing defaults/settings ---------- */
 
+function tvFibLevels() {
+  const base = [
+    ["#9ca3af", -1, "-1"],
+    ["#60a5fa", -0.618, "-0.618"],
+    ["#38bdf8", -0.382, "-0.382"],
+    ["#22d3ee", -0.236, "-0.236"],
+    ["#ffffff", 0, "0"],
+    ["#22c55e", 0.236, "0.236"],
+    ["#84cc16", 0.382, "0.382"],
+    ["#eab308", 0.5, "0.5"],
+    ["#f97316", 0.618, "0.618"],
+    ["#fb7185", 0.65, "0.65"],
+    ["#ec4899", 0.707, "0.707"],
+    ["#a855f7", 0.786, "0.786"],
+    ["#ef4444", 1, "1"],
+    ["#f97316", 1.272, "1.272"],
+    ["#eab308", 1.414, "1.414"],
+    ["#22c55e", 1.618, "1.618"],
+    ["#38bdf8", 2, "2"],
+    ["#60a5fa", 2.618, "2.618"],
+    ["#818cf8", 3.618, "3.618"],
+    ["#c084fc", 4.236, "4.236"]
+  ];
+  return base.map(([color,value,label]) => ({
+    on: [0,0.236,0.382,0.5,0.618,0.786,1,1.618].includes(value),
+    value,
+    label,
+    color,
+    width: 1,
+    lineStyle: "solid"
+  }));
+}
+
 function defaultStyle(type) {
   const common = {
     color: type === "fib" ? "#a78bfa" : type === "rect" ? "#f59e0b" : type === "rr" ? "#22c55e" : "#38bdf8",
     width: 2,
     lineStyle: "solid",
     showLabels: true,
-    showPrice: true
+    showPrice: true,
+    showValue: true,
+    textColor: "#ffffff",
+    fontSize: 12
   };
   if (type === "hline") return { ...common, extendLeft: true, extendRight: true, axisLabel: true };
-  if (type === "trend") return { ...common, extendLeft: false, extendRight: false };
-  if (type === "ray") return { ...common, extendLeft: false, extendRight: true };
+  if (type === "trend") return { ...common, extendLeft: false, extendRight: false, showMiddle: false };
+  if (type === "ray") return { ...common, extendLeft: false, extendRight: true, showMiddle: false };
   if (type === "rect") return { ...common, fillColor: "#f59e0b", fillOpacity: 14, borderColor: "#f59e0b" };
   if (type === "fib") return {
     ...common,
@@ -358,16 +403,16 @@ function defaultStyle(type) {
     background: true,
     fillOpacity: 6,
     extendLines: true,
+    extendLeft: false,
+    extendRight: true,
     labelSide: "right",
-    levels: [
-      { on: true, value: 0, label: "0" },
-      { on: true, value: 0.236, label: "0.236" },
-      { on: true, value: 0.382, label: "0.382" },
-      { on: true, value: 0.5, label: "0.5" },
-      { on: true, value: 0.618, label: "0.618" },
-      { on: true, value: 0.786, label: "0.786" },
-      { on: true, value: 1, label: "1" }
-    ]
+    reverse: false,
+    showLevelValue: true,
+    showLevelPrice: true,
+    showLevelLabel: true,
+    showLevelColorLabels: true,
+    showBackgroundZones: true,
+    levels: tvFibLevels()
   };
   if (type === "rr") return {
     ...common,
@@ -390,6 +435,14 @@ function normalizeDrawing(d) {
   if (d.type === "fib") {
     const def = defaultStyle("fib").levels;
     if (!Array.isArray(d.settings.levels)) d.settings.levels = def;
+    d.settings.levels = d.settings.levels.map((l, i) => ({
+      on: l.on !== false,
+      value: Number(l.value ?? def[i]?.value ?? 0),
+      label: String(l.label ?? def[i]?.label ?? l.value ?? ""),
+      color: l.color || def[i]?.color || d.settings.color || "#a78bfa",
+      width: Number(l.width || 1),
+      lineStyle: l.lineStyle || "solid"
+    }));
   }
   if (d.hidden === undefined) d.hidden = false;
   if (d.locked === undefined) d.locked = false;
@@ -550,13 +603,14 @@ function updateSelectionToolbar() {
 }
 
 function addDrawing(points) {
-  const d = normalizeDrawing({
+  let d = normalizeDrawing({
     id: Date.now() + Math.floor(Math.random() * 1000),
     type: activeTool,
     points,
     locked: false,
     hidden: false
   });
+  d = applyDefaultTemplateToDrawing(d);
   drawings.push(d);
   selectedId = d.id;
   pendingPoints = [];
@@ -778,29 +832,53 @@ function drawFib(d,sel=false) {
   const s = d.settings;
   const a=d.points[0], b=d.points[1], x1=pToX(a), x2=pToX(b);
   if (x1 == null || x2 == null) return;
-  const left = Math.min(x1,x2);
-  const right = s.extendLines ? canvas.clientWidth : Math.max(x1,x2);
-  const low = Math.min(a.price,b.price), high = Math.max(a.price,b.price);
-  const levels = (s.levels || []).filter(l => l.on);
-  if (s.background && levels.length) {
-    const yTop = pToY({ price: high }), yBot = pToY({ price: low });
-    if (yTop != null && yBot != null) {
-      ctx.fillStyle = colorWithOpacity(s.color, s.fillOpacity || 6);
-      ctx.fillRect(left, Math.min(yTop,yBot), right-left, Math.abs(yBot-yTop));
+
+  let baseLow = Math.min(a.price,b.price);
+  let baseHigh = Math.max(a.price,b.price);
+  if (s.reverse) {
+    const tmp = baseLow;
+    baseLow = baseHigh;
+    baseHigh = tmp;
+  }
+  const span = baseHigh - baseLow;
+
+  const leftBase = Math.min(x1,x2);
+  const rightBase = Math.max(x1,x2);
+  const left = s.extendLines && s.extendLeft ? 0 : leftBase;
+  const right = s.extendLines && s.extendRight ? canvas.clientWidth : rightBase;
+  const activeLevels = (s.levels || []).filter(l => l.on).sort((a,b)=>Number(a.value)-Number(b.value));
+
+  if (s.background && activeLevels.length > 1) {
+    for (let i=0; i<activeLevels.length-1; i++) {
+      const l1 = activeLevels[i], l2 = activeLevels[i+1];
+      const y1 = pToY({ price: baseLow + span*Number(l1.value) });
+      const y2 = pToY({ price: baseLow + span*Number(l2.value) });
+      if (y1 != null && y2 != null) {
+        ctx.fillStyle = colorWithOpacity(l2.color || s.color, s.fillOpacity || 6);
+        ctx.fillRect(left, Math.min(y1,y2), right-left, Math.abs(y2-y1));
+      }
     }
   }
-  for (const lev of levels) {
+
+  for (const lev of activeLevels) {
     const v = Number(lev.value);
-    const price = low + (high-low)*v;
+    const price = baseLow + span*v;
     const y = pToY({ price });
     if (y == null) continue;
-    drawLine(left,y,right,y,s.color,s.width,dashFor(s.lineStyle));
+    const c = lev.color || s.color;
+    drawLine(left,y,right,y,c,Number(lev.width || s.width || 1),dashFor(lev.lineStyle || s.lineStyle));
+
     if (s.showLabels) {
-      const text = `${lev.label || v}  ${fmtPrice(price)}`;
-      const lx = s.labelSide === "left" ? left + 4 : right - 135;
-      drawLabel(text,lx,y,"#6d28d9",s.textColor || "#fff");
+      const parts = [];
+      if (s.showLevelLabel && lev.label) parts.push(lev.label);
+      if (s.showLevelValue) parts.push(String(v));
+      if (s.showLevelPrice) parts.push(fmtPrice(price));
+      const text = parts.join("  ");
+      const lx = s.labelSide === "left" ? left + 4 : right - Math.min(190, Math.max(120, text.length * 7));
+      drawLabel(text,lx,y,s.showLevelColorLabels === false ? "#111827" : c,s.textColor || "#fff");
     }
   }
+
   if (sel) { anchor(pToX(a),pToY(a),true); anchor(pToX(b),pToY(b),true); }
 }
 
@@ -850,6 +928,142 @@ function drawOverlay() {
   updateSelectionToolbar();
 }
 
+
+/* ---------- Tool templates ---------- */
+
+function templateStoreKey(toolType) {
+  return `whalex_tool_templates_v215_${toolType}`;
+}
+
+function templateDefaultKey(toolType) {
+  return `whalex_tool_default_template_v215_${toolType}`;
+}
+
+function loadTemplates(toolType) {
+  try {
+    return JSON.parse(localStorage.getItem(templateStoreKey(toolType)) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveTemplates(toolType, templates) {
+  localStorage.setItem(templateStoreKey(toolType), JSON.stringify(templates || {}));
+}
+
+function cloneSettings(settings) {
+  return JSON.parse(JSON.stringify(settings || {}));
+}
+
+function getDefaultTemplateName(toolType) {
+  return localStorage.getItem(templateDefaultKey(toolType)) || "";
+}
+
+function setDefaultTemplateName(toolType, name) {
+  if (name) localStorage.setItem(templateDefaultKey(toolType), name);
+  else localStorage.removeItem(templateDefaultKey(toolType));
+}
+
+function applyDefaultTemplateToDrawing(d) {
+  const templates = loadTemplates(d.type);
+  const def = getDefaultTemplateName(d.type);
+  if (def && templates[def]) {
+    d.settings = { ...defaultStyle(d.type), ...cloneSettings(templates[def]) };
+    if (d.type === "fib" && templates[def].levels) d.settings.levels = cloneSettings(templates[def].levels);
+  }
+  normalizeDrawing(d);
+  return d;
+}
+
+function refreshTemplateSelect() {
+  const d = selectedDrawing();
+  if (!d || !els.templateSelect) return;
+
+  const templates = loadTemplates(d.type);
+  const names = Object.keys(templates).sort();
+  const def = getDefaultTemplateName(d.type);
+
+  els.templateSelect.innerHTML = "";
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = names.length ? "Select template" : "No saved templates";
+  els.templateSelect.appendChild(empty);
+
+  names.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name === def ? `${name}  ★ Default` : name;
+    els.templateSelect.appendChild(opt);
+  });
+
+  if (els.templateNote) {
+    els.templateNote.textContent = `Saved templates for ${d.type.toUpperCase()}: ${names.length}${def ? ` · Default: ${def}` : ""}`;
+  }
+}
+
+function saveCurrentAsTemplate() {
+  const d = selectedDrawing();
+  if (!d) { toast("Select a drawing first"); return; }
+  applySettingsFromModal();
+  normalizeDrawing(d);
+
+  const name = (els.templateName?.value || "").trim();
+  if (!name) { toast("Enter template name"); return; }
+
+  const templates = loadTemplates(d.type);
+  templates[name] = cloneSettings(d.settings);
+  saveTemplates(d.type, templates);
+  refreshTemplateSelect();
+  if (els.templateSelect) els.templateSelect.value = name;
+  toast(`${d.type.toUpperCase()} template saved`);
+}
+
+function applySelectedTemplate() {
+  const d = selectedDrawing();
+  if (!d) { toast("Select a drawing first"); return; }
+  const name = els.templateSelect?.value;
+  if (!name) { toast("Select a template"); return; }
+
+  const templates = loadTemplates(d.type);
+  if (!templates[name]) { toast("Template not found"); return; }
+
+  d.settings = { ...defaultStyle(d.type), ...cloneSettings(templates[name]) };
+  if (d.type === "fib" && templates[name].levels) d.settings.levels = cloneSettings(templates[name].levels);
+  normalizeDrawing(d);
+  saveDrawings();
+  renderDrawingSettings();
+  refreshTemplateSelect();
+  drawOverlay();
+  toast(`${name} applied`);
+}
+
+function setSelectedTemplateAsDefault() {
+  const d = selectedDrawing();
+  if (!d) { toast("Select a drawing first"); return; }
+  const name = els.templateSelect?.value;
+  if (!name) { toast("Select a template"); return; }
+  setDefaultTemplateName(d.type, name);
+  refreshTemplateSelect();
+  toast(`${name} set as default for ${d.type.toUpperCase()}`);
+}
+
+function deleteSelectedTemplate() {
+  const d = selectedDrawing();
+  if (!d) { toast("Select a drawing first"); return; }
+  const name = els.templateSelect?.value;
+  if (!name) { toast("Select a template"); return; }
+
+  const templates = loadTemplates(d.type);
+  delete templates[name];
+  saveTemplates(d.type, templates);
+
+  if (getDefaultTemplateName(d.type) === name) setDefaultTemplateName(d.type, "");
+  if (els.templateSelect) els.templateSelect.value = "";
+  refreshTemplateSelect();
+  toast(`${name} template deleted`);
+}
+
+
 /* ---------- Drawing settings modal ---------- */
 
 function settingRow(label, html) {
@@ -868,37 +1082,62 @@ function renderDrawingSettings() {
   normalizeDrawing(d);
   const s = d.settings;
   els.drawingSettingsTitle.textContent = `${objectName(d)} Settings`;
+  document.querySelector(".tool-settings-card")?.classList.toggle("fib-open", d.type === "fib");
+
   let html = "";
 
   if (activeSettingsTab === "style") {
+    html += `<div class="setting-section-title">Line / Appearance</div>`;
     html += settingRow("Color", `<input data-set="color" type="color" value="${s.color || "#38bdf8"}">`);
     html += settingRow("Line width", `<input data-set="width" type="number" min="1" max="8" value="${s.width || 2}">`);
     html += settingRow("Line style", `<select data-set="lineStyle"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select>`);
 
-    if (["trend","ray"].includes(d.type)) {
+    if (["trend","ray","hline"].includes(d.type)) {
       html += settingRow("Extend left", `<input data-set="extendLeft" type="checkbox" ${s.extendLeft ? "checked" : ""}>`);
       html += settingRow("Extend right", `<input data-set="extendRight" type="checkbox" ${s.extendRight ? "checked" : ""}>`);
+      html += settingRow("Show labels", `<input data-set="showLabels" type="checkbox" ${s.showLabels ? "checked" : ""}>`);
+      html += settingRow("Show price", `<input data-set="showPrice" type="checkbox" ${s.showPrice ? "checked" : ""}>`);
     }
 
     if (d.type === "rect") {
       html += settingRow("Fill color", `<input data-set="fillColor" type="color" value="${s.fillColor || "#f59e0b"}">`);
       html += settingRow("Fill opacity", `<input data-set="fillOpacity" type="number" min="0" max="80" value="${s.fillOpacity ?? 14}">`);
       html += settingRow("Border color", `<input data-set="borderColor" type="color" value="${s.borderColor || s.color || "#f59e0b"}">`);
+      html += settingRow("Show labels", `<input data-set="showLabels" type="checkbox" ${s.showLabels ? "checked" : ""}>`);
     }
 
     if (d.type === "fib") {
+      html += `<div class="setting-section-title">Fib Global Options</div>`;
       html += settingRow("Text color", `<input data-set="textColor" type="color" value="${s.textColor || "#ffffff"}">`);
+      html += settingRow("Font size", `<input data-set="fontSize" type="number" min="8" max="22" value="${s.fontSize || 12}">`);
+      html += settingRow("Reverse Fib", `<input data-set="reverse" type="checkbox" ${s.reverse ? "checked" : ""}>`);
       html += settingRow("Background", `<input data-set="background" type="checkbox" ${s.background ? "checked" : ""}>`);
       html += settingRow("Fill opacity", `<input data-set="fillOpacity" type="number" min="0" max="50" value="${s.fillOpacity ?? 6}">`);
       html += settingRow("Extend lines", `<input data-set="extendLines" type="checkbox" ${s.extendLines ? "checked" : ""}>`);
+      html += settingRow("Extend left", `<input data-set="extendLeft" type="checkbox" ${s.extendLeft ? "checked" : ""}>`);
+      html += settingRow("Extend right", `<input data-set="extendRight" type="checkbox" ${s.extendRight ? "checked" : ""}>`);
       html += settingRow("Label side", `<select data-set="labelSide"><option value="right">Right</option><option value="left">Left</option></select>`);
-      html += `<div class="level-grid"><b>Fib Levels</b>`;
+      html += settingRow("Show labels", `<input data-set="showLabels" type="checkbox" ${s.showLabels ? "checked" : ""}>`);
+      html += settingRow("Show level value", `<input data-set="showLevelValue" type="checkbox" ${s.showLevelValue ? "checked" : ""}>`);
+      html += settingRow("Show price", `<input data-set="showLevelPrice" type="checkbox" ${s.showLevelPrice ? "checked" : ""}>`);
+      html += settingRow("Show custom text", `<input data-set="showLevelLabel" type="checkbox" ${s.showLevelLabel ? "checked" : ""}>`);
+
+      html += `<div class="setting-section-title">Fib Levels</div>`;
+      html += `<div class="fib-level-grid">
+        <div class="fib-level-head"><span>On</span><span>Value</span><span>Label</span><span>Color</span><span>Style</span><span>Width</span><span>Del</span></div>`;
       (s.levels || []).forEach((l, i) => {
-        html += `<div class="level-row">
+        html += `<div class="fib-level-row">
           <input data-level="${i}" data-field="on" type="checkbox" ${l.on ? "checked" : ""}>
           <input data-level="${i}" data-field="value" type="number" step="0.001" value="${l.value}">
           <input data-level="${i}" data-field="label" type="text" value="${l.label}">
           <input data-level="${i}" data-field="color" type="color" value="${l.color || s.color || "#a78bfa"}">
+          <select data-level="${i}" data-field="lineStyle">
+            <option value="solid">Solid</option>
+            <option value="dashed">Dash</option>
+            <option value="dotted">Dot</option>
+          </select>
+          <input data-level="${i}" data-field="width" type="number" min="1" max="5" value="${l.width || 1}">
+          <input data-level="${i}" data-field="delete" type="checkbox" title="Delete this level">
         </div>`;
       });
       html += `</div>`;
@@ -910,12 +1149,16 @@ function renderDrawingSettings() {
       html += settingRow("Loss color", `<input data-set="lossColor" type="color" value="${s.lossColor || "#ef4444"}">`);
       html += settingRow("Fill opacity", `<input data-set="fillOpacity" type="number" min="0" max="60" value="${s.fillOpacity ?? 16}">`);
       html += settingRow("Show RR", `<input data-set="showRR" type="checkbox" ${s.showRR ? "checked" : ""}>`);
+      html += settingRow("Show labels", `<input data-set="showLabels" type="checkbox" ${s.showLabels ? "checked" : ""}>`);
     }
   }
 
   if (activeSettingsTab === "text") {
     html += settingRow("Show labels", `<input data-set="showLabels" type="checkbox" ${s.showLabels ? "checked" : ""}>`);
     html += settingRow("Show price", `<input data-set="showPrice" type="checkbox" ${s.showPrice ? "checked" : ""}>`);
+    html += settingRow("Show value", `<input data-set="showValue" type="checkbox" ${s.showValue ? "checked" : ""}>`);
+    html += settingRow("Text color", `<input data-set="textColor" type="color" value="${s.textColor || "#ffffff"}">`);
+    html += settingRow("Font size", `<input data-set="fontSize" type="number" min="8" max="22" value="${s.fontSize || 12}">`);
     if (d.type === "rr") {
       html += settingRow("Account size", `<input data-set="accountSize" type="number" value="${s.accountSize || 10000}">`);
       html += settingRow("Risk %", `<input data-set="riskPercent" type="number" step="0.1" value="${s.riskPercent || 1}">`);
@@ -930,9 +1173,14 @@ function renderDrawingSettings() {
 
   els.settingsBody.innerHTML = html;
 
-  // set selected options
   els.settingsBody.querySelectorAll("select[data-set]").forEach(sel => {
     const val = s[sel.dataset.set];
+    if (val !== undefined) sel.value = val;
+  });
+  els.settingsBody.querySelectorAll("select[data-level]").forEach(sel => {
+    const idx = Number(sel.dataset.level);
+    const field = sel.dataset.field;
+    const val = s.levels?.[idx]?.[field];
     if (val !== undefined) sel.value = val;
   });
 }
@@ -949,14 +1197,22 @@ function applySettingsFromModal() {
     else d.settings[key] = input.value;
   });
 
+  const deleteLevels = new Set();
   els.settingsBody.querySelectorAll("[data-level]").forEach(input => {
     const idx = Number(input.dataset.level);
     const field = input.dataset.field;
     if (!d.settings.levels[idx]) return;
+    if (field === "delete") {
+      if (input.checked) deleteLevels.add(idx);
+      return;
+    }
     if (input.type === "checkbox") d.settings.levels[idx][field] = input.checked;
     else if (input.type === "number") d.settings.levels[idx][field] = Number(input.value);
     else d.settings.levels[idx][field] = input.value;
   });
+  if (deleteLevels.size) {
+    d.settings.levels = d.settings.levels.filter((_, i) => !deleteLevels.has(i));
+  }
 
   els.settingsBody.querySelectorAll("[data-point]").forEach(input => {
     const idx = Number(input.dataset.point);
@@ -975,7 +1231,9 @@ function openDrawingSettings() {
   normalizeDrawing(d);
   activeSettingsTab = "style";
   document.querySelectorAll(".settings-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === activeSettingsTab));
+  if (els.templateName) els.templateName.value = "";
   renderDrawingSettings();
+  refreshTemplateSelect();
   els.drawingSettingsModal.classList.remove("hidden");
 }
 
@@ -985,6 +1243,7 @@ function resetSelectedDrawingSettings() {
   d.settings = defaultStyle(d.type);
   saveDrawings();
   renderDrawingSettings();
+  refreshTemplateSelect();
   drawOverlay();
 }
 
@@ -1214,9 +1473,31 @@ if (els.selClone) els.selClone.onclick = () => cloneDrawing();
 if (els.selMoveMode) els.selMoveMode.onclick = () => setTool("cursor");
 if (els.selSettings) els.selSettings.onclick = () => openDrawingSettings();
 
+if (els.addFibLevel) els.addFibLevel.onclick = () => {
+  const d = selectedDrawing();
+  if (!d || d.type !== "fib") return;
+  normalizeDrawing(d);
+  d.settings.levels.push({ on:true, value:0, label:"custom", color:d.settings.color || "#a78bfa", width:1, lineStyle:"solid" });
+  saveDrawings();
+  renderDrawingSettings();
+  drawOverlay();
+};
+if (els.restoreFibDefaults) els.restoreFibDefaults.onclick = () => {
+  const d = selectedDrawing();
+  if (!d || d.type !== "fib") return;
+  d.settings.levels = tvFibLevels();
+  saveDrawings();
+  renderDrawingSettings();
+  drawOverlay();
+};
 if (els.closeDrawingSettings) els.closeDrawingSettings.onclick = () => els.drawingSettingsModal.classList.add("hidden");
 if (els.applyDrawingSettings) els.applyDrawingSettings.onclick = () => applySettingsFromModal();
 if (els.resetDrawingSettings) els.resetDrawingSettings.onclick = () => resetSelectedDrawingSettings();
+if (els.saveTemplateBtn) els.saveTemplateBtn.onclick = () => saveCurrentAsTemplate();
+if (els.applyTemplateBtn) els.applyTemplateBtn.onclick = () => applySelectedTemplate();
+if (els.setDefaultTemplateBtn) els.setDefaultTemplateBtn.onclick = () => setSelectedTemplateAsDefault();
+if (els.deleteTemplateBtn) els.deleteTemplateBtn.onclick = () => deleteSelectedTemplate();
+
 document.querySelectorAll(".settings-tab").forEach(btn => {
   btn.onclick = () => {
     activeSettingsTab = btn.dataset.tab;
