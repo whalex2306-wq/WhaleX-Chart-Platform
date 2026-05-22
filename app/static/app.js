@@ -1,4 +1,4 @@
-console.log("WhaleX Chart Platform JS v3.3.0 loaded");
+console.log("WhaleX Chart Platform JS v3.4.0 loaded");
 
 const HARD = { bucket: 100, minM: 5, maxLines: 10, publishMs: 750 };
 
@@ -1862,10 +1862,10 @@ canvas.addEventListener("dblclick", e => {
 /* ---------- Indicator foundation ---------- */
 
 const INDICATOR_LIBRARY = [
-  { kind:"ma", group:"Technicals", tab:"technical", title:"Moving Average", sub:"EMA/SMA/WMA with editable length and source", icon:"MA" },
-  { kind:"vwap", group:"Technicals", tab:"technical", title:"VWAP", sub:"Session anchored VWAP", icon:"VW" },
-  { kind:"volume", group:"Technicals", tab:"technical", title:"Volume", sub:"Volume histogram", icon:"VOL" },
-  { kind:"rsi", group:"Technicals", tab:"technical", title:"Relative Strength Index", sub:"RSI with editable length and levels", icon:"RSI" },
+  { kind:"ma", group:"Technicals", tab:"technical", title:"Moving Average", sub:"EMA/SMA/WMA/SMMA/VWMA with editable length, source, offset", icon:"MA" },
+  { kind:"vwap", group:"Technicals", tab:"technical", title:"VWAP", sub:"Session/Week/Month VWAP with optional bands", icon:"VW" },
+  { kind:"volume", group:"Technicals", tab:"technical", title:"Volume", sub:"Histogram with Volume MA smoothing", icon:"VOL" },
+  { kind:"rsi", group:"Technicals", tab:"technical", title:"Relative Strength Index", sub:"RSI with smoothing MA and editable bands", icon:"RSI" },
   { kind:"whaleLiquidity", group:"WhaleX", tab:"whalex", title:"WhaleX Liquidity Lines", sub:"Live order-book liquidity lines", icon:"WX" },
   { kind:"orderflowFoundation", group:"WhaleX", tab:"whalex", title:"WhaleX Orderflow Foundation", sub:"POC/LVN/HVN foundation placeholder", icon:"OF" }
 ];
@@ -1876,19 +1876,65 @@ let activeIndicatorSettingsTab = "inputs";
 let indicatorSettingsDraft = null;
 
 function indicatorSettingsKey() {
-  return "whalex_indicator_settings_v330";
+  return "whalex_indicator_settings_v340";
 }
 
 function indicatorFavoritesKey() {
-  return "whalex_indicator_favorites_v330";
+  return "whalex_indicator_favorites_v340";
 }
 
 function defaultIndicatorSettings() {
   return {
     ma: [],
-    vwap:{ enabled:false, source:"hlc3", color:"#eab308", width:2, anchor:"session", visible:true },
-    volume:{ enabled:false, visible:true, colorMode:"updown" },
-    rsi:{ enabled:false, length:14, source:"close", upper:70, middle:50, lower:30, color:"#d6a93d", visible:true },
+    vwap:{
+      enabled:false,
+      visible:true,
+      source:"hlc3",
+      color:"#eab308",
+      width:2,
+      anchor:"session",
+      offset:0,
+      showBand1:false,
+      showBand2:false,
+      showBand3:false,
+      bandMode:"stdev",
+      band1Mult:1,
+      band2Mult:2,
+      band3Mult:3,
+      bandColor:"#93c5fd",
+      bandWidth:1
+    },
+    volume:{
+      enabled:false,
+      visible:true,
+      upColor:"#22c55e",
+      downColor:"#ef4444",
+      opacity:28,
+      showMA:false,
+      maType:"SMA",
+      maLength:20,
+      maColor:"#f59e0b",
+      maWidth:2
+    },
+    rsi:{
+      enabled:false,
+      visible:true,
+      length:14,
+      source:"close",
+      upper:70,
+      middle:50,
+      lower:30,
+      color:"#d6a93d",
+      maType:"SMA",
+      maLength:14,
+      showMA:false,
+      maColor:"#a78bfa",
+      bbStdDev:2,
+      showBB:false,
+      upperColor:"#94a3b8",
+      middleColor:"#64748b",
+      lowerColor:"#94a3b8"
+    },
     whaleLiquidity:true,
     orderflowFoundation:false
   };
@@ -1902,7 +1948,8 @@ function defaultMAConfig() {
     length:9,
     source:"close",
     color:["#38bdf8","#a78bfa","#f59e0b","#ef4444","#22c55e"][indicatorSettings.ma.length % 5],
-    width:2
+    width:2,
+    offset:0
   };
 }
 
@@ -1910,7 +1957,9 @@ function normalizeIndicatorSettings(s) {
   const d = defaultIndicatorSettings();
   s = s || {};
 
-  let volume = typeof s.volume === "boolean" ? { enabled:s.volume, visible:true, colorMode:"updown" } : { ...d.volume, ...(s.volume || {}) };
+  let volume = typeof s.volume === "boolean"
+    ? { ...d.volume, enabled:s.volume }
+    : { ...d.volume, ...(s.volume || {}) };
 
   return {
     ma: Array.isArray(s.ma) ? s.ma.map(x => ({
@@ -1920,11 +1969,23 @@ function normalizeIndicatorSettings(s) {
       length: Math.max(1, Number(x.length || 9)),
       source: x.source || "close",
       color: x.color || "#38bdf8",
-      width: Math.max(1, Number(x.width || 2))
+      width: Math.max(1, Number(x.width || 2)),
+      offset: Number(x.offset || 0)
     })) : [],
     vwap: { ...d.vwap, ...(s.vwap || {}) },
-    volume,
-    rsi: { ...d.rsi, ...(s.rsi || {}) },
+    volume: {
+      ...d.volume,
+      ...volume,
+      maLength: Math.max(1, Number(volume.maLength || 20)),
+      maWidth: Math.max(1, Number(volume.maWidth || 2)),
+      opacity: Math.max(5, Math.min(100, Number(volume.opacity || 28)))
+    },
+    rsi: {
+      ...d.rsi,
+      ...(s.rsi || {}),
+      length: Math.max(1, Number((s.rsi || {}).length || 14)),
+      maLength: Math.max(1, Number((s.rsi || {}).maLength || 14))
+    },
     whaleLiquidity: s.whaleLiquidity !== false,
     orderflowFoundation: !!s.orderflowFoundation
   };
@@ -1971,11 +2032,10 @@ function closeIndicatorModal() {
 function renderIndicatorLibrary() {
   const list = document.getElementById("indicatorLibraryList");
   if (!list) return;
-
   const q = (document.getElementById("indicatorSearchInput")?.value || "").toLowerCase().trim();
   const favs = getIndicatorFavorites();
 
-  let items = INDICATOR_LIBRARY.filter(x => {
+  const items = INDICATOR_LIBRARY.filter(x => {
     if (indicatorLibraryTab === "favorites" && !favs.has(x.kind)) return false;
     if (indicatorLibraryTab !== "all" && indicatorLibraryTab !== "favorites" && x.tab !== indicatorLibraryTab) return false;
     if (q && !(x.title.toLowerCase().includes(q) || x.sub.toLowerCase().includes(q) || x.kind.toLowerCase().includes(q))) return false;
@@ -2033,6 +2093,7 @@ function addIndicator(kind) {
   if (kind === "whaleLiquidity") indicatorSettings.whaleLiquidity = true;
   if (kind === "orderflowFoundation") indicatorSettings.orderflowFoundation = true;
 
+  indicatorSettings = normalizeIndicatorSettings(indicatorSettings);
   saveIndicatorSettings();
   redrawIndicators();
   redrawLiquidity();
@@ -2051,7 +2112,7 @@ function indicatorDisplayName(kind, idx=null) {
     return `${cfg.type} ${cfg.length} ${sourceLabel(cfg.source)}`;
   }
   if (kind === "vwap") return `VWAP ${sourceLabel(indicatorSettings.vwap.source)}`;
-  if (kind === "volume") return "Volume";
+  if (kind === "volume") return indicatorSettings.volume.showMA ? `Volume + ${indicatorSettings.volume.maType} ${indicatorSettings.volume.maLength}` : "Volume";
   if (kind === "rsi") return `RSI ${indicatorSettings.rsi.length}`;
   if (kind === "whaleLiquidity") return "WhaleX Liquidity";
   if (kind === "orderflowFoundation") return "WhaleX Orderflow";
@@ -2068,7 +2129,7 @@ function activeIndicators() {
     if (cfg.enabled) out.push({ kind:"ma", idx, visible:cfg.visible !== false, color:cfg.color });
   });
   if (indicatorSettings.vwap.enabled) out.push({ kind:"vwap", visible:indicatorSettings.vwap.visible !== false, color:indicatorSettings.vwap.color });
-  if (indicatorSettings.volume.enabled) out.push({ kind:"volume", visible:indicatorSettings.volume.visible !== false, color:"#64748b" });
+  if (indicatorSettings.volume.enabled) out.push({ kind:"volume", visible:indicatorSettings.volume.visible !== false, color:indicatorSettings.volume.maColor });
   if (indicatorSettings.rsi.enabled) out.push({ kind:"rsi", visible:indicatorSettings.rsi.visible !== false, color:indicatorSettings.rsi.color });
   if (indicatorSettings.whaleLiquidity) out.push({ kind:"whaleLiquidity", visible:true, color:"#22c55e" });
   if (indicatorSettings.orderflowFoundation) out.push({ kind:"orderflowFoundation", visible:true, color:"#d6a93d" });
@@ -2144,8 +2205,12 @@ function closeIndicatorSettingsModal() {
   activeIndicatorTarget = null;
 }
 
-function settingRow(label, inputHtml) {
-  return `<div class="tv-setting-row"><label>${label}</label><div>${inputHtml}</div></div>`;
+function settingRow(label, inputHtml, note="") {
+  return `<div class="tv-setting-row compact"><label>${label}${note ? `<small>${note}</small>` : ""}</label><div>${inputHtml}</div></div>`;
+}
+
+function settingSubtitle(text) {
+  return `<div class="tv-settings-subtitle">${text}</div>`;
 }
 
 function renderIndicatorSettingsBody() {
@@ -2158,11 +2223,14 @@ function renderIndicatorSettingsBody() {
 
   if (kind === "ma") {
     if (tab === "inputs") {
-      html += settingRow("Type", `<select data-field="type"><option value="EMA">EMA</option><option value="SMA">SMA</option><option value="WMA">WMA</option></select>`);
+      html += settingSubtitle("Inputs");
+      html += settingRow("Type", maTypeSelect(cfg.type, false));
       html += settingRow("Length", `<input data-field="length" type="number" min="1" max="1000" value="${cfg.length || 9}">`);
       html += settingRow("Source", sourceSelect(cfg.source));
+      html += settingRow("Offset", `<input data-field="offset" type="number" min="-500" max="500" value="${cfg.offset || 0}">`);
     }
     if (tab === "style") {
+      html += settingSubtitle("Style");
       html += settingRow("Color", `<input data-field="color" type="color" value="${cfg.color || "#38bdf8"}">`);
       html += settingRow("Line width", `<input data-field="width" type="number" min="1" max="6" value="${cfg.width || 2}">`);
     }
@@ -2173,12 +2241,25 @@ function renderIndicatorSettingsBody() {
 
   if (kind === "vwap") {
     if (tab === "inputs") {
+      html += settingSubtitle("Inputs");
       html += settingRow("Source", sourceSelect(cfg.source || "hlc3", ["hlc3","close","ohlc4"]));
-      html += settingRow("Anchor", `<select data-field="anchor"><option value="session">Session / Day</option></select>`);
+      html += settingRow("Anchor period", `<select data-field="anchor"><option value="session">Session / Day</option><option value="week">Week</option><option value="month">Month</option></select>`);
+      html += settingRow("Offset", `<input data-field="offset" type="number" min="-500" max="500" value="${cfg.offset || 0}">`);
+      html += settingSubtitle("Bands");
+      html += settingRow("Band calculation", `<select data-field="bandMode"><option value="stdev">Standard Deviation</option><option value="percent">Percentage</option></select>`);
+      html += settingRow("Band 1", `<input data-field="showBand1" type="checkbox" ${cfg.showBand1 ? "checked" : ""}>`);
+      html += settingRow("Band 1 multiplier", `<input data-field="band1Mult" type="number" step="0.1" min="0" value="${cfg.band1Mult ?? 1}">`);
+      html += settingRow("Band 2", `<input data-field="showBand2" type="checkbox" ${cfg.showBand2 ? "checked" : ""}>`);
+      html += settingRow("Band 2 multiplier", `<input data-field="band2Mult" type="number" step="0.1" min="0" value="${cfg.band2Mult ?? 2}">`);
+      html += settingRow("Band 3", `<input data-field="showBand3" type="checkbox" ${cfg.showBand3 ? "checked" : ""}>`);
+      html += settingRow("Band 3 multiplier", `<input data-field="band3Mult" type="number" step="0.1" min="0" value="${cfg.band3Mult ?? 3}">`);
     }
     if (tab === "style") {
-      html += settingRow("Color", `<input data-field="color" type="color" value="${cfg.color || "#eab308"}">`);
-      html += settingRow("Line width", `<input data-field="width" type="number" min="1" max="6" value="${cfg.width || 2}">`);
+      html += settingSubtitle("Style");
+      html += settingRow("VWAP color", `<input data-field="color" type="color" value="${cfg.color || "#eab308"}">`);
+      html += settingRow("VWAP width", `<input data-field="width" type="number" min="1" max="6" value="${cfg.width || 2}">`);
+      html += settingRow("Band color", `<input data-field="bandColor" type="color" value="${cfg.bandColor || "#93c5fd"}">`);
+      html += settingRow("Band width", `<input data-field="bandWidth" type="number" min="1" max="6" value="${cfg.bandWidth || 1}">`);
     }
     if (tab === "visibility") {
       html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
@@ -2186,21 +2267,51 @@ function renderIndicatorSettingsBody() {
   }
 
   if (kind === "volume") {
-    if (tab === "inputs") html += settingRow("Show volume", `<input data-field="enabled" type="checkbox" ${cfg.enabled !== false ? "checked" : ""}>`);
-    if (tab === "style") html += settingRow("Color mode", `<select data-field="colorMode"><option value="updown">Up/Down</option><option value="single">Single</option></select>`);
-    if (tab === "visibility") html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
+    if (tab === "inputs") {
+      html += settingSubtitle("Inputs");
+      html += settingRow("Show volume", `<input data-field="enabled" type="checkbox" ${cfg.enabled !== false ? "checked" : ""}>`);
+      html += settingSubtitle("Volume Moving Average");
+      html += settingRow("Show Volume MA", `<input data-field="showMA" type="checkbox" ${cfg.showMA ? "checked" : ""}>`);
+      html += settingRow("MA type", maTypeSelect(cfg.maType || "SMA", true));
+      html += settingRow("MA length", `<input data-field="maLength" type="number" min="1" max="1000" value="${cfg.maLength || 20}">`);
+    }
+    if (tab === "style") {
+      html += settingSubtitle("Columns");
+      html += settingRow("Up color", `<input data-field="upColor" type="color" value="${cfg.upColor || "#22c55e"}">`);
+      html += settingRow("Down color", `<input data-field="downColor" type="color" value="${cfg.downColor || "#ef4444"}">`);
+      html += settingRow("Opacity", `<input data-field="opacity" type="number" min="5" max="100" value="${cfg.opacity || 28}">`);
+      html += settingSubtitle("Volume MA");
+      html += settingRow("MA color", `<input data-field="maColor" type="color" value="${cfg.maColor || "#f59e0b"}">`);
+      html += settingRow("MA width", `<input data-field="maWidth" type="number" min="1" max="6" value="${cfg.maWidth || 2}">`);
+    }
+    if (tab === "visibility") {
+      html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
+    }
   }
 
   if (kind === "rsi") {
     if (tab === "inputs") {
-      html += settingRow("Length", `<input data-field="length" type="number" min="1" max="200" value="${cfg.length || 14}">`);
+      html += settingSubtitle("RSI");
+      html += settingRow("RSI length", `<input data-field="length" type="number" min="1" max="200" value="${cfg.length || 14}">`);
       html += settingRow("Source", sourceSelect(cfg.source || "close", ["close","hlc3","ohlc4"]));
+      html += settingSubtitle("Levels");
       html += settingRow("Upper level", `<input data-field="upper" type="number" min="1" max="100" value="${cfg.upper || 70}">`);
       html += settingRow("Middle level", `<input data-field="middle" type="number" min="1" max="100" value="${cfg.middle || 50}">`);
       html += settingRow("Lower level", `<input data-field="lower" type="number" min="1" max="100" value="${cfg.lower || 30}">`);
+      html += settingSubtitle("Smoothing");
+      html += settingRow("Show MA", `<input data-field="showMA" type="checkbox" ${cfg.showMA ? "checked" : ""}>`);
+      html += settingRow("MA type", maTypeSelect(cfg.maType || "SMA", true));
+      html += settingRow("MA length", `<input data-field="maLength" type="number" min="1" max="200" value="${cfg.maLength || 14}">`);
+      html += settingRow("Bollinger Bands", `<input data-field="showBB" type="checkbox" ${cfg.showBB ? "checked" : ""}>`);
+      html += settingRow("BB StdDev", `<input data-field="bbStdDev" type="number" step="0.1" min="0" value="${cfg.bbStdDev || 2}">`);
     }
     if (tab === "style") {
-      html += settingRow("Color", `<input data-field="color" type="color" value="${cfg.color || "#d6a93d"}">`);
+      html += settingSubtitle("RSI Style");
+      html += settingRow("RSI color", `<input data-field="color" type="color" value="${cfg.color || "#d6a93d"}">`);
+      html += settingRow("MA color", `<input data-field="maColor" type="color" value="${cfg.maColor || "#a78bfa"}">`);
+      html += settingRow("Upper color", `<input data-field="upperColor" type="color" value="${cfg.upperColor || "#94a3b8"}">`);
+      html += settingRow("Middle color", `<input data-field="middleColor" type="color" value="${cfg.middleColor || "#64748b"}">`);
+      html += settingRow("Lower color", `<input data-field="lowerColor" type="color" value="${cfg.lowerColor || "#94a3b8"}">`);
     }
     if (tab === "visibility") {
       html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
@@ -2232,6 +2343,13 @@ function sourceSelect(value="close", allowed=["close","open","high","low","hl2",
   return `<select data-field="source">${allowed.map(v => `<option value="${v}" ${v===value ? "selected" : ""}>${labels[v]}</option>`).join("")}</select>`;
 }
 
+function maTypeSelect(value="EMA", includeVolumeTypes=false) {
+  const base = includeVolumeTypes
+    ? ["SMA","EMA","SMMA/RMA","WMA","VWMA"]
+    : ["EMA","SMA","SMMA/RMA","WMA","VWMA"];
+  return `<select data-field="${includeVolumeTypes ? "maType" : "type"}">${base.map(v => `<option value="${v}" ${v===value ? "selected" : ""}>${v}</option>`).join("")}</select>`;
+}
+
 function saveActiveIndicatorSettings() {
   if (!activeIndicatorTarget || !indicatorSettingsDraft) return;
   const { kind, idx } = activeIndicatorTarget;
@@ -2244,6 +2362,7 @@ function saveActiveIndicatorSettings() {
   if (kind === "whaleLiquidity") indicatorSettings.whaleLiquidity = cfg.enabled !== false;
   if (kind === "orderflowFoundation") indicatorSettings.orderflowFoundation = cfg.enabled !== false;
 
+  indicatorSettings = normalizeIndicatorSettings(indicatorSettings);
   saveIndicatorSettings();
   redrawIndicators();
   redrawLiquidity();
@@ -2259,7 +2378,8 @@ function normalizeOneIndicator(kind, cfg) {
     length:Math.max(1, Number(cfg.length || 9)),
     source:cfg.source || "close",
     color:cfg.color || "#38bdf8",
-    width:Math.max(1, Number(cfg.width || 2))
+    width:Math.max(1, Number(cfg.width || 2)),
+    offset:Number(cfg.offset || 0)
   };
   if (kind === "vwap") return {
     enabled:true,
@@ -2267,7 +2387,17 @@ function normalizeOneIndicator(kind, cfg) {
     source:cfg.source || "hlc3",
     color:cfg.color || "#eab308",
     width:Math.max(1, Number(cfg.width || 2)),
-    anchor:cfg.anchor || "session"
+    anchor:cfg.anchor || "session",
+    offset:Number(cfg.offset || 0),
+    showBand1:!!cfg.showBand1,
+    showBand2:!!cfg.showBand2,
+    showBand3:!!cfg.showBand3,
+    bandMode:cfg.bandMode || "stdev",
+    band1Mult:Number(cfg.band1Mult ?? 1),
+    band2Mult:Number(cfg.band2Mult ?? 2),
+    band3Mult:Number(cfg.band3Mult ?? 3),
+    bandColor:cfg.bandColor || "#93c5fd",
+    bandWidth:Math.max(1, Number(cfg.bandWidth || 1))
   };
   if (kind === "rsi") return {
     enabled:true,
@@ -2277,12 +2407,28 @@ function normalizeOneIndicator(kind, cfg) {
     upper:Number(cfg.upper || 70),
     middle:Number(cfg.middle || 50),
     lower:Number(cfg.lower || 30),
-    color:cfg.color || "#d6a93d"
+    color:cfg.color || "#d6a93d",
+    showMA:!!cfg.showMA,
+    maType:cfg.maType || "SMA",
+    maLength:Math.max(1, Number(cfg.maLength || 14)),
+    maColor:cfg.maColor || "#a78bfa",
+    showBB:!!cfg.showBB,
+    bbStdDev:Number(cfg.bbStdDev || 2),
+    upperColor:cfg.upperColor || "#94a3b8",
+    middleColor:cfg.middleColor || "#64748b",
+    lowerColor:cfg.lowerColor || "#94a3b8"
   };
   if (kind === "volume") return {
     enabled:cfg.enabled !== false,
     visible:cfg.visible !== false,
-    colorMode:cfg.colorMode || "updown"
+    upColor:cfg.upColor || "#22c55e",
+    downColor:cfg.downColor || "#ef4444",
+    opacity:Math.max(5,Math.min(100,Number(cfg.opacity || 28))),
+    showMA:!!cfg.showMA,
+    maType:cfg.maType || "SMA",
+    maLength:Math.max(1,Number(cfg.maLength || 20)),
+    maColor:cfg.maColor || "#f59e0b",
+    maWidth:Math.max(1,Number(cfg.maWidth || 2))
   };
   return cfg;
 }
@@ -2294,76 +2440,134 @@ function priceSource(c, source) {
   if (source === "hl2") return (c.high + c.low) / 2;
   if (source === "hlc3") return (c.high + c.low + c.close) / 3;
   if (source === "ohlc4") return (c.open + c.high + c.low + c.close) / 4;
+  if (source === "volume") return c.volume || 0;
   return c.close;
 }
 
-function maData(data, cfg) {
-  const period = Math.max(1, Number(cfg.length || 9));
-  const type = cfg.type || "EMA";
-  if (!data.length) return [];
-
-  if (type === "SMA") {
-    const out = [];
-    let sum = 0;
-    data.forEach((c,i) => {
-      sum += priceSource(c,cfg.source);
-      if (i >= period) sum -= priceSource(data[i-period],cfg.source);
-      if (i >= period-1) out.push({ time:c.time, value:sum/period });
-    });
-    return out;
-  }
-
-  if (type === "WMA") {
-    const out = [];
-    const denom = period * (period + 1) / 2;
-    for (let i=period-1; i<data.length; i++) {
-      let weighted = 0;
-      for (let j=0; j<period; j++) weighted += priceSource(data[i-j],cfg.source) * (period-j);
-      out.push({ time:data[i].time, value:weighted/denom });
-    }
-    return out;
-  }
-
-  const k = 2 / (period + 1);
-  let ema = priceSource(data[0],cfg.source);
-  return data.map(c => {
-    ema = priceSource(c,cfg.source) * k + ema * (1-k);
-    return { time:c.time, value:ema };
+function applyOffset(data, offset=0) {
+  offset = Number(offset || 0);
+  if (!offset || !rawCandles.length) return data;
+  return data.map((p, i) => {
+    const ni = i + offset;
+    if (ni >= 0 && ni < rawCandles.length) return { time:rawCandles[ni].time, value:p.value };
+    return p;
   });
 }
 
-function vwapData(data) {
-  let cumPV = 0, cumV = 0;
-  let currentDay = null;
+function maOverValues(values, period, type="EMA", volumes=null) {
+  period = Math.max(1, Number(period || 9));
+  if (!values.length) return [];
+  if (type === "SMA") {
+    const out = [];
+    let sum = 0;
+    values.forEach((v,i) => {
+      sum += v.value;
+      if (i >= period) sum -= values[i-period].value;
+      if (i >= period-1) out.push({ time:v.time, value:sum/period });
+    });
+    return out;
+  }
+  if (type === "WMA") {
+    const out = [];
+    const denom = period*(period+1)/2;
+    for (let i=period-1; i<values.length; i++) {
+      let weighted=0;
+      for (let j=0;j<period;j++) weighted += values[i-j].value*(period-j);
+      out.push({ time:values[i].time, value:weighted/denom });
+    }
+    return out;
+  }
+  if (type === "SMMA/RMA") {
+    const out = [];
+    let rma = values[0].value;
+    const alpha = 1/period;
+    values.forEach(v => {
+      rma = alpha*v.value + (1-alpha)*rma;
+      out.push({ time:v.time, value:rma });
+    });
+    return out;
+  }
+  if (type === "VWMA") {
+    const out = [];
+    let pv=0, vol=0;
+    values.forEach((v,i) => {
+      const vv = volumes?.[i] ?? rawCandles[i]?.volume ?? 1;
+      pv += v.value*vv;
+      vol += vv;
+      if (i >= period) {
+        const oldV = volumes?.[i-period] ?? rawCandles[i-period]?.volume ?? 1;
+        pv -= values[i-period].value*oldV;
+        vol -= oldV;
+      }
+      if (i >= period-1) out.push({ time:v.time, value:vol ? pv/vol : v.value });
+    });
+    return out;
+  }
+  const k = 2/(period+1);
+  let ema = values[0].value;
+  return values.map(v => {
+    ema = v.value*k + ema*(1-k);
+    return { time:v.time, value:ema };
+  });
+}
+
+function maData(data, cfg) {
+  const vals = data.map(c => ({ time:c.time, value:priceSource(c,cfg.source) }));
+  return applyOffset(maOverValues(vals, cfg.length, cfg.type), cfg.offset);
+}
+
+function volumeMAData(data, cfg) {
+  const vals = data.map(c => ({ time:c.time, value:c.volume || 0 }));
+  return maOverValues(vals, cfg.maLength, cfg.maType, data.map(c => c.volume || 0));
+}
+
+function periodKey(time, anchor) {
+  const d = new Date(time*1000);
+  if (anchor === "week") {
+    const onejan = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    const week = Math.ceil((((d - onejan) / 86400000) + onejan.getUTCDay()+1) / 7);
+    return `${d.getUTCFullYear()}-W${week}`;
+  }
+  if (anchor === "month") return `${d.getUTCFullYear()}-${d.getUTCMonth()+1}`;
+  return d.toISOString().slice(0,10);
+}
+
+function vwapBandsData(data) {
+  let cumPV=0, cumV=0, cumPV2=0, current=null;
   const src = indicatorSettings.vwap.source || "hlc3";
+  const anchor = indicatorSettings.vwap.anchor || "session";
   return data.map(c => {
-    const d = new Date(c.time * 1000).toISOString().slice(0,10);
-    if (d !== currentDay) { currentDay = d; cumPV = 0; cumV = 0; }
+    const key = periodKey(c.time, anchor);
+    if (key !== current) { current=key; cumPV=0; cumV=0; cumPV2=0; }
     const p = priceSource(c,src);
     const vol = Math.max(0,c.volume || 0);
-    cumPV += p * vol;
+    cumPV += p*vol;
+    cumPV2 += p*p*vol;
     cumV += vol;
-    return { time:c.time, value:cumV ? cumPV/cumV : c.close };
+    const vwap = cumV ? cumPV/cumV : c.close;
+    const variance = cumV ? Math.max(cumPV2/cumV - vwap*vwap, 0) : 0;
+    const stdev = Math.sqrt(variance);
+    return { time:c.time, value:vwap, stdev };
   });
 }
 
 function rsiData(data, period=14) {
   if (data.length < period + 1) return [];
   const src = indicatorSettings.rsi.source || "close";
-  let gains = 0, losses = 0;
-  const out = [];
-  for (let i=1; i<=period; i++) {
+  let gains=0, losses=0;
+  const out=[];
+  for (let i=1;i<=period;i++) {
     const ch = priceSource(data[i],src) - priceSource(data[i-1],src);
     if (ch >= 0) gains += ch; else losses -= ch;
   }
-  let avgGain = gains / period, avgLoss = losses / period;
-  for (let i=period+1; i<data.length; i++) {
+  let avgGain=gains/period, avgLoss=losses/period;
+  for (let i=period+1;i<data.length;i++) {
     const ch = priceSource(data[i],src) - priceSource(data[i-1],src);
-    const gain = Math.max(ch,0), loss = Math.max(-ch,0);
-    avgGain = (avgGain*(period-1)+gain)/period;
-    avgLoss = (avgLoss*(period-1)+loss)/period;
+    const gain=Math.max(ch,0), loss=Math.max(-ch,0);
+    avgGain=(avgGain*(period-1)+gain)/period;
+    avgLoss=(avgLoss*(period-1)+loss)/period;
     const rs = avgLoss === 0 ? 100 : avgGain/avgLoss;
-    out.push({ time:data[i].time, value:100 - (100/(1+rs)) });
+    out.push({ time:data[i].time, value:100 - (100/(1+rs)), volume:data[i].volume || 0 });
   }
   return out;
 }
@@ -2371,18 +2575,15 @@ function rsiData(data, period=14) {
 function clearIndicatorSeries() {
   Object.values(indicatorSeries).forEach(s => { try { chart.removeSeries(s); } catch(e) {} });
   indicatorSeries = {};
-  if (volumeSeries) { try { chart.removeSeries(volumeSeries); } catch(e) {}; volumeSeries = null; }
+  if (volumeSeries) { try { chart.removeSeries(volumeSeries); } catch(e) {}; volumeSeries=null; }
   drawRSI();
 }
 
-function addLineIndicator(key, data, color, width=2) {
+function addLineIndicator(key, data, color, width=2, priceScaleId=undefined) {
   try {
-    indicatorSeries[key] = chart.addLineSeries({
-      color,
-      lineWidth:Math.max(1,Number(width || 2)),
-      priceLineVisible:false,
-      lastValueVisible:true
-    });
+    const opts = { color, lineWidth:Math.max(1,Number(width || 2)), priceLineVisible:false, lastValueVisible:true };
+    if (priceScaleId !== undefined) opts.priceScaleId = priceScaleId;
+    indicatorSeries[key] = chart.addLineSeries(opts);
     indicatorSeries[key].setData(data);
   } catch(e) {}
 }
@@ -2396,11 +2597,29 @@ function redrawIndicators() {
   });
 
   if (indicatorSettings.vwap.enabled && indicatorSettings.vwap.visible !== false) {
-    addLineIndicator("vwap", vwapData(rawCandles), indicatorSettings.vwap.color, indicatorSettings.vwap.width);
+    const v = vwapBandsData(rawCandles);
+    addLineIndicator("vwap", applyOffset(v.map(x => ({time:x.time,value:x.value})), indicatorSettings.vwap.offset), indicatorSettings.vwap.color, indicatorSettings.vwap.width);
+    [1,2,3].forEach(n => {
+      if (!indicatorSettings.vwap[`showBand${n}`]) return;
+      const mult = Number(indicatorSettings.vwap[`band${n}Mult`] || n);
+      const upper = v.map(x => ({ time:x.time, value: indicatorSettings.vwap.bandMode === "percent" ? x.value*(1+mult/100) : x.value + x.stdev*mult }));
+      const lower = v.map(x => ({ time:x.time, value: indicatorSettings.vwap.bandMode === "percent" ? x.value*(1-mult/100) : x.value - x.stdev*mult }));
+      addLineIndicator(`vwapU${n}`, applyOffset(upper, indicatorSettings.vwap.offset), indicatorSettings.vwap.bandColor, indicatorSettings.vwap.bandWidth);
+      addLineIndicator(`vwapL${n}`, applyOffset(lower, indicatorSettings.vwap.offset), indicatorSettings.vwap.bandColor, indicatorSettings.vwap.bandWidth);
+    });
   }
 
   if (indicatorSettings.volume.enabled && indicatorSettings.volume.visible !== false) {
     try {
+      const alpha = Math.max(5,Math.min(100,Number(indicatorSettings.volume.opacity || 28))) / 100;
+      const hexToRgb = hex => {
+        const n = parseInt((hex || "#64748b").replace("#",""),16);
+        return [(n>>16)&255,(n>>8)&255,n&255];
+      };
+      const rgba = (hex,a) => {
+        const [r,g,b]=hexToRgb(hex);
+        return `rgba(${r},${g},${b},${a})`;
+      };
       volumeSeries = chart.addHistogramSeries({
         priceFormat:{type:"volume"},
         priceScaleId:"volume",
@@ -2411,8 +2630,11 @@ function redrawIndicators() {
       volumeSeries.setData(rawCandles.map(c => ({
         time:c.time,
         value:c.volume || 0,
-        color:c.close >= c.open ? "rgba(34,197,94,.28)" : "rgba(239,68,68,.28)"
+        color:c.close >= c.open ? rgba(indicatorSettings.volume.upColor, alpha) : rgba(indicatorSettings.volume.downColor, alpha)
       })));
+      if (indicatorSettings.volume.showMA) {
+        addLineIndicator("volumeMA", volumeMAData(rawCandles, indicatorSettings.volume), indicatorSettings.volume.maColor, indicatorSettings.volume.maWidth, "volume");
+      }
     } catch(e) {}
   }
 
@@ -2427,38 +2649,84 @@ function drawRSI() {
 
   const rect = rsiPanel.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  rsiCanvas.width = Math.floor(rect.width * dpr);
-  rsiCanvas.height = Math.floor(rect.height * dpr);
-  rsiCanvas.style.width = rect.width + "px";
-  rsiCanvas.style.height = rect.height + "px";
+  rsiCanvas.width=Math.floor(rect.width*dpr);
+  rsiCanvas.height=Math.floor(rect.height*dpr);
+  rsiCanvas.style.width=rect.width+"px";
+  rsiCanvas.style.height=rect.height+"px";
   rsiCtx.setTransform(dpr,0,0,dpr,0,0);
   rsiCtx.clearRect(0,0,rect.width,rect.height);
 
   const period = Math.max(1,Number(indicatorSettings.rsi.length || 14));
-  const data = rsiData(rawCandles,period).slice(-160);
+  const data = rsiData(rawCandles,period).slice(-180);
   if (!data.length) return;
 
-  const padL = 36, padR = 10, padT = 16, padB = 14;
-  const w = rect.width-padL-padR, h = rect.height-padT-padB;
-  const yFor = v => padT + (100-v)/100*h;
-  const xFor = i => padL + (i/Math.max(1,data.length-1))*w;
+  const padL=36,padR=10,padT=16,padB=14;
+  const w=rect.width-padL-padR,h=rect.height-padT-padB;
+  const yFor=v => padT+(100-v)/100*h;
+  const xFor=i => padL+(i/Math.max(1,data.length-1))*w;
 
-  rsiCtx.strokeStyle = "rgba(148,163,184,.35)";
-  rsiCtx.lineWidth = 1;
-  [indicatorSettings.rsi.upper, indicatorSettings.rsi.middle, indicatorSettings.rsi.lower].forEach(v => {
-    const y = yFor(Number(v));
+  const levelRows = [
+    [indicatorSettings.rsi.upper, indicatorSettings.rsi.upperColor],
+    [indicatorSettings.rsi.middle, indicatorSettings.rsi.middleColor],
+    [indicatorSettings.rsi.lower, indicatorSettings.rsi.lowerColor]
+  ];
+  levelRows.forEach(([v,c]) => {
+    const y=yFor(Number(v));
+    rsiCtx.strokeStyle=c || "rgba(148,163,184,.35)";
+    rsiCtx.lineWidth=1;
     rsiCtx.beginPath(); rsiCtx.moveTo(padL,y); rsiCtx.lineTo(rect.width-padR,y); rsiCtx.stroke();
-    rsiCtx.fillStyle = "#94a3b8"; rsiCtx.font = "11px Inter, Arial"; rsiCtx.fillText(String(v),8,y+3);
+    rsiCtx.fillStyle="#94a3b8"; rsiCtx.font="11px Inter, Arial"; rsiCtx.fillText(String(v),8,y+3);
   });
 
-  rsiCtx.strokeStyle = indicatorSettings.rsi.color || "#d6a93d";
-  rsiCtx.lineWidth = 2;
-  rsiCtx.beginPath();
-  data.forEach((p,i) => {
-    const x = xFor(i), y = yFor(p.value);
-    if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
-  });
-  rsiCtx.stroke();
+  const drawLine = (arr,color,width=2) => {
+    rsiCtx.strokeStyle=color;
+    rsiCtx.lineWidth=width;
+    rsiCtx.beginPath();
+    arr.forEach((p,i) => {
+      const x=xFor(i), y=yFor(p.value);
+      if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
+    });
+    rsiCtx.stroke();
+  };
+
+  drawLine(data, indicatorSettings.rsi.color || "#d6a93d", 2);
+
+  if (indicatorSettings.rsi.showMA) {
+    const smoothed = maOverValues(data, indicatorSettings.rsi.maLength, indicatorSettings.rsi.maType, data.map(x => x.volume || 0));
+    const offset = data.length - smoothed.length;
+    const mapped = smoothed.map((x,i) => ({ ...x, value:x.value, _idx:i+offset }));
+    rsiCtx.strokeStyle = indicatorSettings.rsi.maColor || "#a78bfa";
+    rsiCtx.lineWidth = 2;
+    rsiCtx.beginPath();
+    mapped.forEach((p,i) => {
+      const x = xFor(p._idx), y = yFor(p.value);
+      if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
+    });
+    rsiCtx.stroke();
+
+    if (indicatorSettings.rsi.showBB && smoothed.length) {
+      const len = Math.max(1,Number(indicatorSettings.rsi.maLength || 14));
+      const stdevRows = [];
+      for (let i=len-1; i<data.length; i++) {
+        const slice = data.slice(i-len+1,i+1).map(x => x.value);
+        const mean = slice.reduce((a,b)=>a+b,0)/slice.length;
+        const sd = Math.sqrt(slice.reduce((a,b)=>a+(b-mean)*(b-mean),0)/slice.length);
+        stdevRows.push({ idx:i, mean, sd });
+      }
+      const mult = Number(indicatorSettings.rsi.bbStdDev || 2);
+      ["upper","lower"].forEach(side => {
+        rsiCtx.strokeStyle = "rgba(167,139,250,.65)";
+        rsiCtx.lineWidth = 1;
+        rsiCtx.beginPath();
+        stdevRows.forEach((p,i) => {
+          const val = side === "upper" ? p.mean + p.sd*mult : p.mean - p.sd*mult;
+          const x = xFor(p.idx), y = yFor(val);
+          if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
+        });
+        rsiCtx.stroke();
+      });
+    }
+  }
 }
 
 /* ---------- Data connection ---------- */
