@@ -1,3 +1,4 @@
+console.log("WhaleX Chart Platform JS v3.2.0 loaded");
 
 const HARD = { bucket: 100, minM: 5, maxLines: 10, publishMs: 750 };
 
@@ -57,6 +58,27 @@ const els = {
   cVal: document.getElementById("cVal"),
   vVal: document.getElementById("vVal"),
   toast: document.getElementById("toast"),
+  indicatorModal: document.getElementById("indicatorModal"),
+  closeIndicatorModal: document.getElementById("closeIndicatorModal"),
+  applyIndicatorsBtn: document.getElementById("applyIndicatorsBtn"),
+  clearIndicatorsBtn: document.getElementById("clearIndicatorsBtn"),
+  maRows: document.getElementById("maRows"),
+  addMARowBtn: document.getElementById("addMARowBtn"),
+  vwapToggle: document.getElementById("vwapToggle"),
+  vwapSource: document.getElementById("vwapSource"),
+  vwapColor: document.getElementById("vwapColor"),
+  vwapWidth: document.getElementById("vwapWidth"),
+  vwapAnchor: document.getElementById("vwapAnchor"),
+  volumeToggle: document.getElementById("volumeToggle"),
+  rsiToggle: document.getElementById("rsiToggle"),
+  rsiLength: document.getElementById("rsiLength"),
+  rsiUpper: document.getElementById("rsiUpper"),
+  rsiMiddle: document.getElementById("rsiMiddle"),
+  rsiLower: document.getElementById("rsiLower"),
+  rsiColor: document.getElementById("rsiColor"),
+  rsiSource: document.getElementById("rsiSource"),
+  whaleLiquidityToggle: document.getElementById("whaleLiquidityToggle"),
+  orderflowPlaceholderToggle: document.getElementById("orderflowPlaceholderToggle"),
   toolTip: document.getElementById("toolTip"),
   selectionToolbar: document.getElementById("selectionToolbar"),
   selDelete: document.getElementById("selDelete"),
@@ -121,6 +143,21 @@ const shellEl = document.getElementById("chartShell");
 const canvas = document.getElementById("drawCanvas");
 const ctx = canvas.getContext("2d");
 
+
+const rsiPanel = document.createElement("div");
+rsiPanel.id = "rsiPanel";
+rsiPanel.className = "rsi-panel hidden";
+rsiPanel.innerHTML = `<div class="rsi-title">RSI 14</div><canvas id="rsiCanvas"></canvas>`;
+shellEl.appendChild(rsiPanel);
+const rsiCanvas = document.getElementById("rsiCanvas");
+const rsiCtx = rsiCanvas.getContext("2d");
+
+const orderflowTag = document.createElement("div");
+orderflowTag.id = "orderflowTag";
+orderflowTag.className = "orderflow-tag hidden";
+orderflowTag.textContent = "WhaleX Orderflow Foundation: POC/LVN engine next";
+shellEl.appendChild(orderflowTag);
+
 const chart = LightweightCharts.createChart(chartEl, {
   layout: {
     background: { color: "#070b12" },
@@ -160,6 +197,18 @@ let selectedId = null;
 let dragMode = null;
 let dragStart = null;
 let lastAlertKeys = new Set();
+let indicatorSeries = {};
+let volumeSeries = null;
+let indicatorSettings = {
+  ma: [
+    { enabled:false, type:"EMA", length:9, source:"close", color:"#38bdf8", width:2 }
+  ],
+  vwap:{ enabled:false, source:"hlc3", color:"#eab308", width:2, anchor:"session" },
+  volume:false,
+  rsi:{ enabled:false, length:14, source:"close", upper:70, middle:50, lower:30, color:"#d6a93d" },
+  whaleLiquidity:true,
+  orderflowFoundation:false
+};
 let activeSettingsTab = "style";
 
 function interval() {
@@ -208,6 +257,7 @@ function toast(m) {
 
 function safeResize() {
   resizeChart();
+  setTimeout(drawRSI, 50);
   requestAnimationFrame(() => { resizeChart(); drawOverlay(); });
   setTimeout(() => { resizeChart(); drawOverlay(); }, 80);
   setTimeout(() => { resizeChart(); drawOverlay(); }, 260);
@@ -303,6 +353,7 @@ function redrawMainSeries() {
   renderedCandles = getRenderedCandles();
   mainSeries.setData(seriesData(renderedCandles));
   candlesByTime = new Map(renderedCandles.map(c => [String(c.time), c]));
+  redrawIndicators();
   drawOverlay();
 }
 
@@ -315,6 +366,7 @@ function updateOneCandle(c) {
   const rc = renderedCandles.find(x => x.time === c.time) || c;
   candlesByTime.set(String(rc.time), rc);
   if (mainSeries) mainSeries.update(seriesData([rc])[0]);
+  redrawIndicators();
   drawOverlay();
 }
 
@@ -1800,6 +1852,364 @@ canvas.addEventListener("dblclick", e => {
 });
 
 
+
+/* ---------- Indicator foundation ---------- */
+
+function indicatorSettingsKey() {
+  return "whalex_indicator_settings_v310";
+}
+
+function defaultIndicatorSettings() {
+  return {
+    ma: [
+      { enabled:false, type:"EMA", length:9, source:"close", color:"#38bdf8", width:2 }
+    ],
+    vwap:{ enabled:false, source:"hlc3", color:"#eab308", width:2, anchor:"session" },
+    volume:false,
+    rsi:{ enabled:false, length:14, source:"close", upper:70, middle:50, lower:30, color:"#d6a93d" },
+    whaleLiquidity:true,
+    orderflowFoundation:false
+  };
+}
+
+function normalizeIndicatorSettings(s) {
+  const d = defaultIndicatorSettings();
+  s = s || {};
+  const ma = Array.isArray(s.ma) ? s.ma : d.ma;
+  return {
+    ma: ma.map(x => ({
+      enabled: !!x.enabled,
+      type: x.type || "EMA",
+      length: Math.max(1, Number(x.length || 9)),
+      source: x.source || "close",
+      color: x.color || "#38bdf8",
+      width: Math.max(1, Number(x.width || 2))
+    })),
+    vwap: { ...d.vwap, ...(s.vwap || {}) },
+    volume: !!s.volume,
+    rsi: { ...d.rsi, ...(s.rsi || {}) },
+    whaleLiquidity: s.whaleLiquidity !== false,
+    orderflowFoundation: !!s.orderflowFoundation
+  };
+}
+
+function loadIndicatorSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(indicatorSettingsKey()) || "null");
+    indicatorSettings = normalizeIndicatorSettings(saved);
+  } catch(e) {
+    indicatorSettings = defaultIndicatorSettings();
+  }
+  renderIndicatorUI();
+}
+
+function saveIndicatorSettings() {
+  localStorage.setItem(indicatorSettingsKey(), JSON.stringify(indicatorSettings));
+}
+
+function renderIndicatorUI() {
+  renderMARows();
+
+  if (els.vwapToggle) els.vwapToggle.checked = !!indicatorSettings.vwap.enabled;
+  if (els.vwapSource) els.vwapSource.value = indicatorSettings.vwap.source || "hlc3";
+  if (els.vwapColor) els.vwapColor.value = indicatorSettings.vwap.color || "#eab308";
+  if (els.vwapWidth) els.vwapWidth.value = indicatorSettings.vwap.width || 2;
+  if (els.vwapAnchor) els.vwapAnchor.value = indicatorSettings.vwap.anchor || "session";
+
+  if (els.volumeToggle) els.volumeToggle.checked = !!indicatorSettings.volume;
+
+  if (els.rsiToggle) els.rsiToggle.checked = !!indicatorSettings.rsi.enabled;
+  if (els.rsiLength) els.rsiLength.value = indicatorSettings.rsi.length || 14;
+  if (els.rsiUpper) els.rsiUpper.value = indicatorSettings.rsi.upper || 70;
+  if (els.rsiMiddle) els.rsiMiddle.value = indicatorSettings.rsi.middle || 50;
+  if (els.rsiLower) els.rsiLower.value = indicatorSettings.rsi.lower || 30;
+  if (els.rsiColor) els.rsiColor.value = indicatorSettings.rsi.color || "#d6a93d";
+  if (els.rsiSource) els.rsiSource.value = indicatorSettings.rsi.source || "close";
+
+  if (els.whaleLiquidityToggle) els.whaleLiquidityToggle.checked = indicatorSettings.whaleLiquidity !== false;
+  if (els.orderflowPlaceholderToggle) els.orderflowPlaceholderToggle.checked = !!indicatorSettings.orderflowFoundation;
+}
+
+function renderMARows() {
+  if (!els.maRows) return;
+  els.maRows.innerHTML = "";
+  indicatorSettings.ma.forEach((row, idx) => {
+    const div = document.createElement("div");
+    div.className = "ma-row";
+    div.innerHTML = `
+      <input type="checkbox" data-ma="${idx}" data-field="enabled" ${row.enabled ? "checked" : ""} title="Show">
+      <select data-ma="${idx}" data-field="type">
+        <option value="EMA">EMA</option>
+        <option value="SMA">SMA</option>
+        <option value="WMA">WMA</option>
+      </select>
+      <input type="number" min="1" max="1000" data-ma="${idx}" data-field="length" value="${row.length || 9}" title="Length">
+      <select data-ma="${idx}" data-field="source">
+        <option value="close">Close</option>
+        <option value="open">Open</option>
+        <option value="high">High</option>
+        <option value="low">Low</option>
+        <option value="hl2">HL2</option>
+        <option value="hlc3">HLC3</option>
+        <option value="ohlc4">OHLC4</option>
+      </select>
+      <input type="color" data-ma="${idx}" data-field="color" value="${row.color || "#38bdf8"}" title="Color">
+      <input type="number" min="1" max="6" data-ma="${idx}" data-field="width" value="${row.width || 2}" title="Width">
+      <button class="ma-delete-btn" data-ma-delete="${idx}" title="Delete">×</button>
+    `;
+    els.maRows.appendChild(div);
+    div.querySelector(`[data-field="type"]`).value = row.type || "EMA";
+    div.querySelector(`[data-field="source"]`).value = row.source || "close";
+  });
+
+  els.maRows.querySelectorAll("[data-ma]").forEach(input => {
+    const evt = input.type === "checkbox" || input.tagName === "SELECT" ? "change" : "input";
+    input.addEventListener(evt, () => {
+      const idx = Number(input.dataset.ma);
+      const field = input.dataset.field;
+      if (!indicatorSettings.ma[idx]) return;
+      if (input.type === "checkbox") indicatorSettings.ma[idx][field] = input.checked;
+      else if (input.type === "number") indicatorSettings.ma[idx][field] = Math.max(1, Number(input.value || 1));
+      else indicatorSettings.ma[idx][field] = input.value;
+    });
+  });
+
+  els.maRows.querySelectorAll("[data-ma-delete]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.maDelete);
+      indicatorSettings.ma.splice(idx,1);
+      if (!indicatorSettings.ma.length) indicatorSettings.ma.push({ enabled:false, type:"EMA", length:9, source:"close", color:"#38bdf8", width:2 });
+      renderMARows();
+    });
+  });
+}
+
+function addMARow() {
+  indicatorSettings.ma.push({
+    enabled:true,
+    type:"EMA",
+    length:9,
+    source:"close",
+    color:["#38bdf8","#a78bfa","#f59e0b","#ef4444","#22c55e"][indicatorSettings.ma.length % 5],
+    width:2
+  });
+  renderMARows();
+}
+
+function collectIndicatorSettings() {
+  // MA rows already sync live from input handlers; collect other panels here.
+  indicatorSettings.vwap = {
+    enabled: !!els.vwapToggle?.checked,
+    source: els.vwapSource?.value || "hlc3",
+    color: els.vwapColor?.value || "#eab308",
+    width: Number(els.vwapWidth?.value || 2),
+    anchor: els.vwapAnchor?.value || "session"
+  };
+  indicatorSettings.volume = !!els.volumeToggle?.checked;
+  indicatorSettings.rsi = {
+    enabled: !!els.rsiToggle?.checked,
+    length: Math.max(1, Number(els.rsiLength?.value || 14)),
+    source: els.rsiSource?.value || "close",
+    upper: Number(els.rsiUpper?.value || 70),
+    middle: Number(els.rsiMiddle?.value || 50),
+    lower: Number(els.rsiLower?.value || 30),
+    color: els.rsiColor?.value || "#d6a93d"
+  };
+  indicatorSettings.whaleLiquidity = els.whaleLiquidityToggle?.checked !== false;
+  indicatorSettings.orderflowFoundation = !!els.orderflowPlaceholderToggle?.checked;
+  indicatorSettings = normalizeIndicatorSettings(indicatorSettings);
+  saveIndicatorSettings();
+}
+
+function priceSource(c, source) {
+  if (source === "open") return c.open;
+  if (source === "high") return c.high;
+  if (source === "low") return c.low;
+  if (source === "hl2") return (c.high + c.low) / 2;
+  if (source === "hlc3") return (c.high + c.low + c.close) / 3;
+  if (source === "ohlc4") return (c.open + c.high + c.low + c.close) / 4;
+  return c.close;
+}
+
+function maData(data, cfg) {
+  const period = Math.max(1, Number(cfg.length || 9));
+  const type = cfg.type || "EMA";
+  if (!data.length) return [];
+
+  if (type === "SMA") {
+    const out = [];
+    let sum = 0;
+    data.forEach((c,i) => {
+      sum += priceSource(c,cfg.source);
+      if (i >= period) sum -= priceSource(data[i-period],cfg.source);
+      if (i >= period-1) out.push({ time:c.time, value:sum/period });
+    });
+    return out;
+  }
+
+  if (type === "WMA") {
+    const out = [];
+    const denom = period * (period + 1) / 2;
+    for (let i=period-1; i<data.length; i++) {
+      let weighted = 0;
+      for (let j=0; j<period; j++) {
+        weighted += priceSource(data[i-j],cfg.source) * (period-j);
+      }
+      out.push({ time:data[i].time, value:weighted/denom });
+    }
+    return out;
+  }
+
+  const k = 2 / (period + 1);
+  let ema = priceSource(data[0],cfg.source);
+  return data.map(c => {
+    ema = priceSource(c,cfg.source) * k + ema * (1-k);
+    return { time:c.time, value:ema };
+  });
+}
+
+function vwapData(data) {
+  let cumPV = 0, cumV = 0;
+  let currentDay = null;
+  const src = indicatorSettings.vwap.source || "hlc3";
+  return data.map(c => {
+    const d = new Date(c.time * 1000).toISOString().slice(0,10);
+    if (d !== currentDay) {
+      currentDay = d;
+      cumPV = 0;
+      cumV = 0;
+    }
+    const p = priceSource(c,src);
+    const vol = Math.max(0,c.volume || 0);
+    cumPV += p * vol;
+    cumV += vol;
+    return { time:c.time, value:cumV ? cumPV/cumV : c.close };
+  });
+}
+
+function rsiData(data, period=14) {
+  if (data.length < period + 1) return [];
+  const src = indicatorSettings.rsi.source || "close";
+  let gains = 0, losses = 0;
+  const out = [];
+  for (let i=1; i<=period; i++) {
+    const ch = priceSource(data[i],src) - priceSource(data[i-1],src);
+    if (ch >= 0) gains += ch; else losses -= ch;
+  }
+  let avgGain = gains / period, avgLoss = losses / period;
+  for (let i=period+1; i<data.length; i++) {
+    const ch = priceSource(data[i],src) - priceSource(data[i-1],src);
+    const gain = Math.max(ch, 0);
+    const loss = Math.max(-ch, 0);
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    const rsi = 100 - (100 / (1 + rs));
+    out.push({ time:data[i].time, value:rsi });
+  }
+  return out;
+}
+
+function clearIndicatorSeries() {
+  Object.values(indicatorSeries).forEach(s => {
+    try { chart.removeSeries(s); } catch(e) {}
+  });
+  indicatorSeries = {};
+  if (volumeSeries) {
+    try { chart.removeSeries(volumeSeries); } catch(e) {}
+    volumeSeries = null;
+  }
+  drawRSI();
+}
+
+function addLineIndicator(key, data, color, width=2) {
+  try {
+    indicatorSeries[key] = chart.addLineSeries({
+      color,
+      lineWidth: Math.max(1, Number(width || 2)),
+      priceLineVisible:false,
+      lastValueVisible:true
+    });
+    indicatorSeries[key].setData(data);
+  } catch(e) {}
+}
+
+function redrawIndicators() {
+  clearIndicatorSeries();
+  if (!rawCandles.length) return;
+
+  indicatorSettings.ma.forEach((cfg, idx) => {
+    if (cfg.enabled) addLineIndicator(`ma${idx}`, maData(rawCandles,cfg), cfg.color, cfg.width);
+  });
+
+  if (indicatorSettings.vwap.enabled) {
+    addLineIndicator("vwap", vwapData(rawCandles), indicatorSettings.vwap.color, indicatorSettings.vwap.width);
+  }
+
+  if (indicatorSettings.volume) {
+    try {
+      volumeSeries = chart.addHistogramSeries({
+        color:"#64748b",
+        priceFormat:{type:"volume"},
+        priceScaleId:"",
+        scaleMargins:{top:0.82,bottom:0}
+      });
+      volumeSeries.setData(rawCandles.map(c => ({
+        time:c.time,
+        value:c.volume || 0,
+        color:c.close >= c.open ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"
+      })));
+    } catch(e) {}
+  }
+
+  drawRSI();
+  if (orderflowTag) orderflowTag.classList.toggle("hidden", !indicatorSettings.orderflowFoundation);
+}
+
+function drawRSI() {
+  rsiPanel.classList.toggle("hidden", !indicatorSettings.rsi.enabled);
+  if (!indicatorSettings.rsi.enabled || !rawCandles.length) return;
+
+  const rect = rsiPanel.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  rsiCanvas.width = Math.floor(rect.width * dpr);
+  rsiCanvas.height = Math.floor(rect.height * dpr);
+  rsiCanvas.style.width = rect.width + "px";
+  rsiCanvas.style.height = rect.height + "px";
+  rsiCtx.setTransform(dpr,0,0,dpr,0,0);
+  rsiCtx.clearRect(0,0,rect.width,rect.height);
+
+  const period = Math.max(1, Number(indicatorSettings.rsi.length || 14));
+  const data = rsiData(rawCandles, period).slice(-160);
+  if (!data.length) return;
+
+  const padL = 36, padR = 10, padT = 16, padB = 14;
+  const w = rect.width - padL - padR;
+  const h = rect.height - padT - padB;
+
+  function yFor(v) { return padT + (100-v)/100*h; }
+  function xFor(i) { return padL + (i/Math.max(1,data.length-1))*w; }
+
+  rsiCtx.strokeStyle = "rgba(148,163,184,.35)";
+  rsiCtx.lineWidth = 1;
+  [indicatorSettings.rsi.upper, indicatorSettings.rsi.middle, indicatorSettings.rsi.lower].forEach(v => {
+    const y = yFor(Number(v));
+    rsiCtx.beginPath(); rsiCtx.moveTo(padL,y); rsiCtx.lineTo(rect.width-padR,y); rsiCtx.stroke();
+    rsiCtx.fillStyle = "#94a3b8";
+    rsiCtx.font = "11px Inter, Arial";
+    rsiCtx.fillText(String(v), 8, y+3);
+  });
+
+  rsiCtx.strokeStyle = indicatorSettings.rsi.color || "#d6a93d";
+  rsiCtx.lineWidth = 2;
+  rsiCtx.beginPath();
+  data.forEach((p,i) => {
+    const x = xFor(i), y = yFor(p.value);
+    if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
+  });
+  rsiCtx.stroke();
+}
+
 /* ---------- Data connection ---------- */
 
 function connect() {
@@ -1865,6 +2275,22 @@ function connect() {
   };
 }
 
+
+function openIndicatorModal() {
+  const modal = document.getElementById("indicatorModal");
+  if (!modal) {
+    toast("Indicator modal missing. Please redeploy v3.2 with clear cache.");
+    return;
+  }
+  try { loadIndicatorSettings(); } catch(e) { console.warn("Indicator settings load failed", e); }
+  modal.classList.remove("hidden");
+}
+
+function closeIndicatorModal() {
+  document.getElementById("indicatorModal")?.classList.add("hidden");
+}
+
+
 /* ---------- UI events ---------- */
 
 chart.subscribeCrosshairMove(param => {
@@ -1916,7 +2342,39 @@ els.showTitleRow.onchange = () => {
   setTimeout(safeResize,80);
 };
 els.chartType.onchange = () => makeSeries(els.chartType.value);
-els.indicatorBtn.onclick = () => toast("Indicator menu comes after drawing tools are stable");
+els.indicatorBtn.onclick = () => openIndicatorModal();
+document.getElementById("indicatorBtn")?.addEventListener("click", openIndicatorModal);
+if (els.closeIndicatorModal) els.closeIndicatorModal.onclick = () => closeIndicatorModal();
+if (els.addMARowBtn) els.addMARowBtn.onclick = () => addMARow();
+
+document.querySelectorAll(".indicator-tab").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".indicator-tab").forEach(b => b.classList.toggle("active", b === btn));
+    const tab = btn.dataset.tab;
+    document.querySelectorAll(".indicator-tab-panel").forEach(panel => panel.classList.add("hidden"));
+    const panel = document.getElementById("indicatorTab" + tab.toUpperCase().replace("MA","MA"));
+    if (tab === "ma") document.getElementById("indicatorTabMA")?.classList.remove("hidden");
+    if (tab === "vwap") document.getElementById("indicatorTabVWAP")?.classList.remove("hidden");
+    if (tab === "momentum") document.getElementById("indicatorTabMomentum")?.classList.remove("hidden");
+    if (tab === "whalex") document.getElementById("indicatorTabWhaleX")?.classList.remove("hidden");
+  };
+});
+
+if (els.applyIndicatorsBtn) els.applyIndicatorsBtn.onclick = () => {
+  collectIndicatorSettings();
+  redrawIndicators();
+  redrawLiquidity();
+  els.indicatorModal.classList.add("hidden");
+  toast("Indicators updated");
+};
+if (els.clearIndicatorsBtn) els.clearIndicatorsBtn.onclick = () => {
+  indicatorSettings = defaultIndicatorSettings();
+  saveIndicatorSettings();
+  renderIndicatorUI();
+  redrawIndicators();
+  redrawLiquidity();
+  toast("Indicators reset");
+};
 els.alertBtn.onclick = () => toast("Liquidity toast alerts are active");
 
 const toolButtons = {
@@ -2071,6 +2529,7 @@ document.addEventListener("keydown", e => {
   if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "r") resetChartView();
 });
 
+loadIndicatorSettings();
 makeSeries("candles");
 setTool("cursor");
 document.body.classList.add("mode-move");

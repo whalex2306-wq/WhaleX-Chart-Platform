@@ -1,66 +1,71 @@
-# WhaleX Chart Platform v2.22 — Forced RR One-Click
+# WhaleX Chart Platform v3.2 — Indicator Menu Cache/Event Fix
 
 ## Main fix
 
-Long Position / Short Position is now forced to plot on the first pointer click.
+The Indicators button was still showing the old toast message:
 
-This does not wait for the old multi-click drawing flow.
+`Indicator menu comes after drawing tools are stable`
 
-## Behavior
+That means either:
+- old `app.js` was still cached in browser, or
+- the indicator click event was not replaced correctly.
 
-### Long Position
-- Select Long Position
-- Click once on chart
-- Entry is placed exactly where clicked
-- Target auto-created above Entry
-- Stop auto-created below Entry
-- Default RR = 1:1
-- User can drag Entry / Target / Stop
+## Fixed in v3.2
 
-### Short Position
-- Select Short Position
-- Click once on chart
-- Entry is placed exactly where clicked
-- Target auto-created below Entry
-- Stop auto-created above Entry
-- Default RR = 1:1
-- User can drag Entry / Target / Stop
+- Removed the old toast handler completely
+- Added `openIndicatorModal()` hard binding
+- Added direct fallback click listener on `#indicatorBtn`
+- Added cache-busting:
+  - `app.js?v=3.2.0`
+  - `styles.css?v=3.2.0`
+- Added console stamp:
+  - `WhaleX Chart Platform JS v3.2.0 loaded`
+- Guaranteed Indicator modal exists in `index.html`
 
-## Technical fix
+## Indicator menu remains TradingView-style configurable
 
-- Long/Short now plot on `pointerdown` using capture mode
-- A fallback click handler is also kept
-- Old multi-click pending flow is bypassed for Long/Short
-- Added robust chart coordinate fallback so clicking near future/blank chart area still creates the tool
+Moving Average:
+- Show / hide
+- Type: EMA / SMA / WMA
+- Length default 9, editable
+- Source
+- Color
+- Width
+- Add/delete MA rows
 
-## Kept
+VWAP:
+- Show / hide
+- Source
+- Color
+- Width
 
-- Drag-any-tool behavior
-- TV-style left toolbar flyout
-- Draggable floating toolbar
-- Tool templates
-- Fib point A to Point B
-- Full-height chart
-- TV on-chart logo hidden
-- WhaleX branding visible
+RSI:
+- Show / hide
+- Length
+- Source
+- 70 / 50 / 30 editable levels
+- Color
 
-## Test
-
-1. Click RR/Forecasting icon.
-2. Select Long Position.
-3. Click once on the chart.
-4. The position box must appear immediately.
-5. Repeat with Short Position.
+WhaleX:
+- Show/hide liquidity lines
+- Orderflow foundation placeholder
 
 ## Syntax check
 
 JavaScript syntax check: PASS
+
+Stale old toast string present: False
 
 
 
 ## Deploy
 
 Upload all files over the existing GitHub repo, commit, then Render:
+
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.22.0`.
+Then hard refresh the browser:
+- Mac: Cmd + Shift + R
+- Windows: Ctrl + F5
+
+Check `/health`; it must show version `3.2.0`.
