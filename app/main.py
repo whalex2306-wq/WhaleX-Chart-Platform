@@ -8,7 +8,7 @@ from .bybit_market import BybitMarketStream
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 
-app = FastAPI(title="WhaleX Chart Platform", version="3.7.0")
+app = FastAPI(title="WhaleX Chart Platform", version="3.9.0")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
@@ -17,7 +17,7 @@ async def index():
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "service": "whalex-chart-platform", "version": "3.7.0"}
+    return {"ok": True, "service": "whalex-chart-platform", "version": "3.9.0"}
 
 @app.websocket("/ws/chart")
 async def ws_chart(

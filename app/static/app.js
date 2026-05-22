@@ -1,6 +1,6 @@
-console.log("WhaleX Chart Platform JS v3.7.0 loaded");
+console.log("WhaleX Chart Platform JS v3.9.0 loaded");
 
-const HARD = { bucket: 100, minM: 5, maxLines: 10, publishMs: 750 };
+const HARD = { bucket: 100, minM: 2, maxLines: 28, publishMs: 750 };
 
 const els = {
   shell: document.getElementById("shell"),
@@ -16,6 +16,11 @@ const els = {
   closeSettings: document.getElementById("closeSettings"),
   showBids: document.getElementById("showBids"),
   showAsks: document.getElementById("showAsks"),
+  showFarLiquidity: document.getElementById("showFarLiquidity"),
+  autoFitLiquidity: document.getElementById("autoFitLiquidity"),
+  showEstimatedLiquidation: document.getElementById("showEstimatedLiquidation"),
+  estLiqRange: document.getElementById("estLiqRange"),
+  autoFitEstimatedLiq: document.getElementById("autoFitEstimatedLiq"),
   showWatermark: document.getElementById("showWatermark"),
   showBottomPanel: document.getElementById("showBottomPanel"),
   showRightPanel: document.getElementById("showRightPanel"),
@@ -247,6 +252,9 @@ let mainSeries = null;
 let seriesType = "candles";
 let ws = null;
 let priceLines = [];
+let liquidityScaleSeries = null;
+let farLiquidityBadges = [];
+let estimatedLiqBadges = [];
 let lastLiquidity = null;
 let rawCandles = [];
 let renderedCandles = [];
@@ -382,6 +390,16 @@ function makeSeries(type) {
       wickDownColor: "#ef4444"
     });
   }
+  try {
+    if (liquidityScaleSeries) chart.removeSeries(liquidityScaleSeries);
+  } catch(e) {}
+  liquidityScaleSeries = chart.addLineSeries({
+    color: "rgba(0,0,0,0)",
+    lineWidth: 1,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false
+  });
   redrawMainSeries();
   redrawLiquidity();
   drawOverlay();
@@ -439,25 +457,205 @@ function clearLiquidityLines() {
   priceLines = [];
 }
 
-function addLiquidityLine(line) {
+function liquidityColor(line) {
   const isBid = line.side === "bid";
-  const color = isBid ? "#22c55e" : "#ef4444";
-  const label = `${isBid ? "BID" : "ASK"} ${fmtPrice(line.price)} | ${fmtM(line.liquidity_m)} | ${fmtAge(line.age_seconds)} | ${line.behavior}`;
+  if (line.zone === "far" || line.zone === "extreme") return isBid ? "#16a34a" : "#dc2626";
+  return isBid ? "#22c55e" : "#ef4444";
+}
+
+function liquidityLineStyle(line) {
+  if (line.strength === "Strong" || line.behavior === "Persistent") return LightweightCharts.LineStyle.Solid;
+  if (line.zone === "far" || line.zone === "extreme") return LightweightCharts.LineStyle.Dashed;
+  return LightweightCharts.LineStyle.Dotted;
+}
+
+function liquidityWidth(line) {
+  if (line.strength === "Strong") return 3;
+  if (line.strength === "Medium" || line.behavior === "Persistent") return 2;
+  return 1;
+}
+
+function lineIsFar(line) {
+  return ["far", "extreme"].includes(line.zone);
+}
+
+function addLiquidityLine(line) {
+  if (!els.showFarLiquidity?.checked && lineIsFar(line)) return;
+
+  const isBid = line.side === "bid";
+  const color = liquidityColor(line);
+  const dist = Number(line.distance_pct || 0).toFixed(2);
+  const label = `${isBid ? "BID" : "ASK"} ${fmtPrice(line.price)} | ${fmtM(line.liquidity_m)} | ${dist}% | ${line.zone || "near"} | ${line.strength || "—"} | ${line.behavior}`;
   priceLines.push(mainSeries.createPriceLine({
     price: Number(line.price),
     color,
-    lineWidth: line.age_seconds >= 180 ? 3 : 2,
-    lineStyle: line.age_seconds >= 180 ? LightweightCharts.LineStyle.Solid : LightweightCharts.LineStyle.Dashed,
+    lineWidth: liquidityWidth(line),
+    lineStyle: liquidityLineStyle(line),
     axisLabelVisible: true,
     title: label
   }));
 }
 
+function allLiquidityLines() {
+  if (!lastLiquidity) return [];
+  const rows = [];
+  if (els.showBids?.checked) rows.push(...(lastLiquidity.bid_lines || []));
+  if (els.showAsks?.checked) rows.push(...(lastLiquidity.ask_lines || []));
+  return rows.filter(l => els.showFarLiquidity?.checked || !lineIsFar(l));
+}
+
+function updateLiquidityScale(lines) {
+  if (!liquidityScaleSeries || !rawCandles.length || !els.autoFitLiquidity?.checked) {
+    if (liquidityScaleSeries) liquidityScaleSeries.setData([]);
+    return;
+  }
+
+  const mid = Number(lastLiquidity?.mid || 0);
+  if (!mid) {
+    liquidityScaleSeries.setData([]);
+    return;
+  }
+
+  // Do not fit unlimited extremes; include important lines within approx 6%.
+  const important = lines
+    .filter(l => Number(l.liquidity_m || l.estimated_m || 0) >= HARD.minM)
+    .filter(l => !l.estimated_m || els.autoFitEstimatedLiq?.checked)
+    .filter(l => Math.abs(Number(l.price) - mid) / mid * 100 <= (l.estimated_m ? 12.0 : 6.0));
+
+  if (!important.length) {
+    liquidityScaleSeries.setData([]);
+    return;
+  }
+
+  const prices = important.map(l => Number(l.price)).filter(Number.isFinite);
+  if (!prices.length) {
+    liquidityScaleSeries.setData([]);
+    return;
+  }
+
+  const minP = Math.min(...prices, mid);
+  const maxP = Math.max(...prices, mid);
+  const lastTime = rawCandles[rawCandles.length - 1]?.time || Math.floor(Date.now()/1000);
+  const step = intervalSecondsValue ? intervalSecondsValue() : 60;
+  liquidityScaleSeries.setData([
+    { time: lastTime, value: minP },
+    { time: lastTime + step, value: maxP }
+  ]);
+}
+
+function drawFarBadges(lines) {
+  for (const b of farLiquidityBadges) {
+    try { b.remove(); } catch(e) {}
+  }
+  farLiquidityBadges = [];
+  if (!els.showFarLiquidity?.checked || !mainSeries || !lastLiquidity?.mid) return;
+
+  const far = lines
+    .filter(lineIsFar)
+    .filter(l => Number(l.liquidity_m || 0) >= HARD.minM)
+    .sort((a,b) => Number(b.liquidity_m || 0) - Number(a.liquidity_m || 0));
+
+  const above = far.find(l => Number(l.price) > Number(lastLiquidity.mid));
+  const below = far.find(l => Number(l.price) < Number(lastLiquidity.mid));
+
+  const mk = (line, pos) => {
+    if (!line) return;
+    const el = document.createElement("div");
+    el.className = `far-liq-badge ${line.side === "bid" ? "bid" : "ask"} ${pos}`;
+    el.textContent = `${pos === "above" ? "↑" : "↓"} ${line.side.toUpperCase()} ${fmtPrice(line.price)} ${fmtM(line.liquidity_m)} ${Number(line.distance_pct || 0).toFixed(1)}%`;
+    document.getElementById("chartShell")?.appendChild(el);
+    farLiquidityBadges.push(el);
+  };
+
+  mk(above, "above");
+  mk(below, "below");
+}
+
+
+function selectedEstimatedRange() {
+  return els.estLiqRange?.value || "24H";
+}
+
+function estimatedRangePayload() {
+  const est = lastLiquidity?.estimated_liquidation;
+  if (!est?.ready) return null;
+  return est.ranges?.[selectedEstimatedRange()] || null;
+}
+
+function estimatedLiquidationLines() {
+  if (!els.showEstimatedLiquidation?.checked) return [];
+  const r = estimatedRangePayload();
+  if (!r) return [];
+  const rows = [
+    ...(r.long_liq || []),
+    ...(r.short_liq || [])
+  ];
+  return rows
+    .filter(x => Number(x.estimated_m || 0) > 0)
+    .sort((a,b) => Number(b.estimated_m || 0) - Number(a.estimated_m || 0))
+    .slice(0, 24);
+}
+
+function estimatedColor(line) {
+  return line.side === "short_liq" ? "#f97316" : "#06b6d4";
+}
+
+function estimatedTitle(line) {
+  const side = line.side === "short_liq" ? "SHORT LIQ" : "LONG LIQ";
+  return `${side} ${fmtPrice(line.price)} | est ${fmtM(line.estimated_m)} | ${line.range_key} | ${line.leverage_hint} | ${Number(line.distance_pct || 0).toFixed(2)}% | conf ${line.confidence}`;
+}
+
+function addEstimatedLiquidationLine(line) {
+  const color = estimatedColor(line);
+  const strong = line.strength === "Strong";
+  priceLines.push(mainSeries.createPriceLine({
+    price: Number(line.price),
+    color,
+    lineWidth: strong ? 3 : 2,
+    lineStyle: strong ? LightweightCharts.LineStyle.Solid : LightweightCharts.LineStyle.Dashed,
+    axisLabelVisible: true,
+    title: estimatedTitle(line)
+  }));
+}
+
+function drawEstimatedLiqBadges(lines) {
+  for (const b of estimatedLiqBadges) {
+    try { b.remove(); } catch(e) {}
+  }
+  estimatedLiqBadges = [];
+  if (!els.showEstimatedLiquidation?.checked || !lastLiquidity?.mid) return;
+
+  const shortAbove = lines.filter(x => x.side === "short_liq" && Number(x.price) > Number(lastLiquidity.mid))
+    .sort((a,b) => Number(b.estimated_m || 0) - Number(a.estimated_m || 0))[0];
+  const longBelow = lines.filter(x => x.side === "long_liq" && Number(x.price) < Number(lastLiquidity.mid))
+    .sort((a,b) => Number(b.estimated_m || 0) - Number(a.estimated_m || 0))[0];
+
+  const mk = (line, cls, label) => {
+    if (!line) return;
+    const el = document.createElement("div");
+    el.className = `est-liq-badge ${cls}`;
+    el.innerHTML = `${label}: ${fmtPrice(line.price)} ${fmtM(line.estimated_m)} <span class="muted">${line.range_key} · ${line.leverage_hint} · conf ${line.confidence}</span>`;
+    document.getElementById("chartShell")?.appendChild(el);
+    estimatedLiqBadges.push(el);
+  };
+
+  mk(shortAbove, "short", "↑ Short Liq");
+  mk(longBelow, "long", "↓ Long Liq");
+}
+
+
 function redrawLiquidity() {
   if (!lastLiquidity || !mainSeries) return;
   clearLiquidityLines();
-  if (els.showBids?.checked) for (const l of lastLiquidity.bid_lines || []) addLiquidityLine(l);
-  if (els.showAsks?.checked) for (const l of lastLiquidity.ask_lines || []) addLiquidityLine(l);
+  const rows = allLiquidityLines();
+  for (const l of rows) addLiquidityLine(l);
+
+  const estRows = estimatedLiquidationLines();
+  for (const l of estRows) addEstimatedLiquidationLine(l);
+
+  updateLiquidityScale([...rows, ...estRows]);
+  drawFarBadges(rows);
+  drawEstimatedLiqBadges(estRows);
 }
 
 function updateLiquidity(p) {
@@ -466,7 +664,12 @@ function updateLiquidity(p) {
   if (els.mid) els.mid.textContent = fmtPrice(p.mid);
   if (els.bestBid) els.bestBid.textContent = fmtPrice(p.best_bid);
   if (els.bestAsk) els.bestAsk.textContent = fmtPrice(p.best_ask);
-  if (els.liqSource) els.liqSource.textContent = "Liquidity: " + (p.exchange || "Bybit");
+
+  const levelText = p.book_levels ? ` · ${p.book_levels.bid}/${p.book_levels.ask} levels` : "";
+  const farText = p.far_counts ? ` · far ${p.far_counts.bid}/${p.far_counts.ask}` : "";
+  const estText = p.estimated_liquidation?.ready ? ` · estLiq ${selectedEstimatedRange()} OI ${fmtM(p.estimated_liquidation.oi_value_m || 0)}` : "";
+  if (els.liqSource) els.liqSource.textContent = "Liquidity: " + (p.exchange || "Bybit") + levelText + farText + estText;
+
   if (p.history_source && els.historySource) els.historySource.textContent = "Candles: " + p.history_source;
   renderRows(els.bidRows, p.bid_lines || [], "bid");
   renderRows(els.askRows, p.ask_lines || [], "ask");
@@ -475,12 +678,12 @@ function updateLiquidity(p) {
 
 function checkLiquidityAlerts(p) {
   const lines = [...(p.bid_lines || []), ...(p.ask_lines || [])]
-    .filter(x => x.age_seconds >= 180 || ["Building", "Fading"].includes(x.behavior));
+    .filter(x => x.age_seconds >= 180 || ["Building", "Fading"].includes(x.behavior) || x.strength === "Strong" || x.zone === "far");
   for (const l of lines) {
-    const k = `${l.side}_${l.price}_${l.behavior}`;
+    const k = `${l.side}_${l.price}_${l.behavior}_${l.zone}_${l.strength}`;
     if (!lastAlertKeys.has(k)) {
       lastAlertKeys.add(k);
-      toast(`${l.side.toUpperCase()} ${fmtPrice(l.price)} ${fmtM(l.liquidity_m)} · ${l.behavior}`);
+      toast(`${l.side.toUpperCase()} ${fmtPrice(l.price)} ${fmtM(l.liquidity_m)} · ${l.zone || "near"} · ${l.strength || "—"} · ${l.behavior}`);
     }
   }
   if (lastAlertKeys.size > 100) lastAlertKeys = new Set([...lastAlertKeys].slice(-50));
@@ -492,7 +695,8 @@ function renderRows(tbody, rows, side) {
   for (const l of rows) {
     const tr = document.createElement("tr");
     const klass = side === "bid" ? "bidText" : "askText";
-    tr.innerHTML = `<td class="${klass}">${fmtPrice(l.price)}</td><td>${fmtM(l.liquidity_m)}</td><td>${fmtAge(l.age_seconds)}</td><td>${l.behavior || "—"}</td>`;
+    const dist = Number(l.distance_pct || 0).toFixed(2);
+    tr.innerHTML = `<td class="${klass}">${fmtPrice(l.price)}</td><td>${fmtM(l.liquidity_m)}</td><td>${dist}%</td><td>${l.zone || "near"} · ${l.strength || "—"} · ${l.behavior || "—"}</td>`;
     tbody.appendChild(tr);
   }
 }
@@ -3295,6 +3499,13 @@ els.panelBtn.onclick = () => {
   setTimeout(safeResize,80);
 };
 els.settingsBtn.onclick = () => els.settingsModal.classList.remove("hidden");
+if (els.showBids) els.showBids.onchange = () => redrawLiquidity();
+if (els.showAsks) els.showAsks.onchange = () => redrawLiquidity();
+if (els.showFarLiquidity) els.showFarLiquidity.onchange = () => redrawLiquidity();
+if (els.autoFitLiquidity) els.autoFitLiquidity.onchange = () => redrawLiquidity();
+if (els.showEstimatedLiquidation) els.showEstimatedLiquidation.onchange = () => redrawLiquidity();
+if (els.estLiqRange) els.estLiqRange.onchange = () => redrawLiquidity();
+if (els.autoFitEstimatedLiq) els.autoFitEstimatedLiq.onchange = () => redrawLiquidity();
 els.closeSettings.onclick = () => els.settingsModal.classList.add("hidden");
 els.showBids.onchange = redrawLiquidity;
 els.showAsks.onchange = redrawLiquidity;

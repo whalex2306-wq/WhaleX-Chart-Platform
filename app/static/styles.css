@@ -1089,3 +1089,59 @@ body.mode-edit #drawCanvas.dragging{
   font-weight:800;
   pointer-events:none;
 }
+
+
+/* v3.8: far liquidity engine */
+.far-liq-badge{
+  position:absolute;
+  right:78px;
+  z-index:8;
+  border-radius:8px;
+  padding:5px 8px;
+  font-size:11px;
+  font-weight:900;
+  color:#111827;
+  pointer-events:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.25);
+}
+.far-liq-badge.bid{
+  background:#22c55e;
+}
+.far-liq-badge.ask{
+  background:#ef4444;
+  color:#fff;
+}
+.far-liq-badge.above{ top:54px; }
+.far-liq-badge.below{ bottom:calc(var(--panel-bottom-offset, 14px) + 14px); }
+.liq-zone-near{ opacity:1; }
+.liq-zone-mid{ opacity:.9; }
+.liq-zone-far{ opacity:.78; }
+.liq-zone-extreme{ opacity:.64; }
+
+
+/* v3.9: estimated liquidation map */
+.est-liq-badge{
+  position:absolute;
+  left:18px;
+  z-index:8;
+  border-radius:9px;
+  padding:6px 9px;
+  font-size:11px;
+  font-weight:900;
+  pointer-events:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.25);
+}
+.est-liq-badge.short{
+  top:82px;
+  background:#f97316;
+  color:#111827;
+}
+.est-liq-badge.long{
+  top:112px;
+  background:#06b6d4;
+  color:#07111f;
+}
+.est-liq-badge .muted{
+  opacity:.8;
+  font-weight:800;
+}

@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>WhaleX Chart Platform v3.7</title>
+  <title>WhaleX Chart Platform v3.9</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="/static/whalex-logo.png" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=3.9.0" />
 </head>
 <body>
   <div class="tv-shell focus-mode" id="shell">
@@ -108,7 +108,7 @@
         <div class="title-row hidden" id="titleRow">
           <div>
             <h1 id="title">BTCUSDT · Bybit Liquidity</h1>
-            <p id="subtitle">WhaleX chart · indicator scale auto scroll</p>
+            <p id="subtitle">WhaleX chart · estimated liquidation map</p>
           </div>
           <div class="source-pills">
             <span id="historySource">Candles: loading</span>
@@ -187,6 +187,17 @@
       </div>
       <label><input id="showBids" type="checkbox" checked /> Show bid liquidity</label>
       <label><input id="showAsks" type="checkbox" checked /> Show ask liquidity</label>
+      <label><input id="showFarLiquidity" type="checkbox" checked /> Show far liquidity</label>
+      <label><input id="autoFitLiquidity" type="checkbox" checked /> Auto-extend scale to important far liquidity</label>
+      <label><input id="showEstimatedLiquidation" type="checkbox" checked /> Show estimated liquidation map</label>
+      <label>Estimated liquidation range
+        <select id="estLiqRange">
+          <option value="24H">24H</option>
+          <option value="7D">7D</option>
+          <option value="30D">30D</option>
+        </select>
+      </label>
+      <label><input id="autoFitEstimatedLiq" type="checkbox" checked /> Auto-fit estimated liquidation levels</label>
       <label><input id="showWatermark" type="checkbox" checked /> Show WhaleX watermark</label>
       <label><input id="showBottomPanel" type="checkbox" /> Show liquidity table</label>
       <label><input id="showRightPanel" type="checkbox" /> Show right panel / object tree</label>
@@ -281,6 +292,6 @@
   <div id="toast" class="toast"></div>
 
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=3.9.0"></script>
 </body>
 </html>
