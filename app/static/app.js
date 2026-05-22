@@ -34,6 +34,9 @@ const els = {
   rectBtn: document.getElementById("rectBtn"),
   fibBtn: document.getElementById("fibBtn"),
   rrBtn: document.getElementById("rrBtn"),
+  leftToolFlyout: document.getElementById("leftToolFlyout"),
+  longPosBtn: document.getElementById("longPosBtn"),
+  shortPosBtn: document.getElementById("shortPosBtn"),
   undoBtn: document.getElementById("undoBtn"),
   deleteBtn: document.getElementById("deleteBtn"),
   titleRow: document.getElementById("titleRow"),
@@ -164,7 +167,7 @@ function interval() {
 }
 
 function storageKey() {
-  return `whalex_drawings_v216_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
+  return `whalex_drawings_v220_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}_${interval()}`;
 }
 
 function wsUrl() {
@@ -535,7 +538,9 @@ function dist(a,b,c,d) {
 }
 
 function neededPoints(t) {
-  return t === "hline" ? 1 : t === "rr" ? 3 : 2;
+  // Long/Short position works like TV default workflow here:
+  // click Entry, click Target, Stop is auto-created at 1:1 and can be dragged later.
+  return t === "hline" ? 1 : t === "rr" ? 3 : (t === "longpos" || t === "shortpos") ? 2 : 2;
 }
 
 function setTool(t) {
@@ -555,9 +560,13 @@ function setTool(t) {
     ray: els.rayBtn,
     rect: els.rectBtn,
     fib: els.fibBtn,
-    rr: els.rrBtn
+    rr: els.rrBtn,
+    longpos: els.rrBtn,
+    shortpos: els.rrBtn
   };
   (map[t] || els.cursorBtn)?.classList.add("active");
+  els.longPosBtn?.classList.toggle("active", t === "longpos");
+  els.shortPosBtn?.classList.toggle("active", t === "shortpos");
 
   const isDraw = !["cursor", "edit"].includes(t);
   document.body.classList.toggle("mode-move", t === "cursor");
@@ -569,7 +578,7 @@ function setTool(t) {
   shellEl.classList.toggle("select-mode", t === "edit");
 
   if (els.toolTip) {
-    const label = t === "cursor" ? "Move / Pan" : t === "edit" ? "Select / Edit" : `Drawing: ${t} (${neededPoints(t)} click${neededPoints(t) > 1 ? "s" : ""})`;
+    const label = t === "cursor" ? "Move / Pan" : t === "edit" ? "Select / Edit" : `Drawing: ${t === "longpos" ? "Long Position 1:1" : t === "shortpos" ? "Short Position 1:1" : t} (${neededPoints(t)} click${neededPoints(t) > 1 ? "s" : ""})`;
     els.toolTip.textContent = label;
   }
 
@@ -595,7 +604,7 @@ function loadDrawings() {
 }
 
 function objectName(d) {
-  return ({ hline:"Horizontal Line", trend:"Trendline", ray:"Ray", rect:"Rectangle", fib:"Fib Retracement", rr:"Risk/Reward" }[d.type] || d.type) + " #" + String(d.id).slice(-4);
+  return (d.type === "rr" ? ((d.settings?.mode === "short" ? "Short Position" : "Long Position")) : ({ hline:"Horizontal Line", trend:"Trendline", ray:"Ray", rect:"Rectangle", fib:"Fib Retracement" }[d.type] || d.type)) + " #" + String(d.id).slice(-4);
 }
 
 function renderObjectTree() {
@@ -835,14 +844,53 @@ function updateSelectionToolbar() {
 }
 
 function addDrawing(points) {
+  const rawTool = activeTool;
+  const isPosition = rawTool === "longpos" || rawTool === "shortpos";
+  const finalType = isPosition ? "rr" : rawTool;
+
+  let finalPoints = [...points];
+
+  // v2.20: Long/Short default is 1:1.
+  // User clicks Entry + Target only. Stop is auto-created equal distance on the other side.
+  if (isPosition && points.length >= 2) {
+    const entry = points[0];
+    const target = points[1];
+    const reward = Math.abs(target.price - entry.price);
+
+    let stopPrice;
+    if (rawTool === "longpos") {
+      stopPrice = entry.price - reward;
+    } else {
+      stopPrice = entry.price + reward;
+    }
+
+    finalPoints = [
+      entry,
+      target,
+      { time: target.time, price: stopPrice }
+    ];
+  }
+
   let d = normalizeDrawing({
     id: Date.now() + Math.floor(Math.random() * 1000),
-    type: activeTool,
-    points,
+    type: finalType,
+    points: finalPoints,
     locked: false,
     hidden: false
   });
+
+  if (finalType === "rr") {
+    d.settings.mode = rawTool === "shortpos" ? "short" : "long";
+    d.settings.color = rawTool === "shortpos" ? "#ef4444" : "#22c55e";
+  }
+
   d = applyDefaultTemplateToDrawing(d);
+
+  // Keep selected Long/Short mode even after template is applied.
+  if (finalType === "rr" && isPosition) {
+    d.settings.mode = rawTool === "shortpos" ? "short" : "long";
+  }
+
   drawings.push(d);
   selectedId = d.id;
   pendingPoints = [];
@@ -948,11 +996,24 @@ function hitDrawing(d,x,y) {
     if (x>=l && x<=r && y>=t && y<=b) return { kind:"body" };
   }
   if (d.type === "fib") {
+    const x1 = pToX(d.points[0]), x2 = pToX(d.points[1]);
+    const left = Math.min(x1 ?? 0, x2 ?? 0);
+    const right = Math.max(x1 ?? 0, x2 ?? 0);
     const low = Math.min(d.points[0].price, d.points[1].price);
     const high = Math.max(d.points[0].price, d.points[1].price);
+    const yLow = pToY({ price: low });
+    const yHigh = pToY({ price: high });
+
+    // Move whole Fib by clicking inside its A-B box, not only exactly on a level line.
+    if (x1 != null && x2 != null && yLow != null && yHigh != null) {
+      const top = Math.min(yLow, yHigh);
+      const bottom = Math.max(yLow, yHigh);
+      if (x >= left - 8 && x <= right + 8 && y >= top - 8 && y <= bottom + 8) return { kind:"body" };
+    }
+
     for (const lev of d.settings.levels.filter(l => l.on)) {
       const yy = pToY({ price: low + (high-low)*Number(lev.value) });
-      if (yy != null && Math.abs(y-yy) < 6) return { kind:"body" };
+      if (yy != null && Math.abs(y-yy) < 8) return { kind:"body" };
     }
   }
   return null;
@@ -1119,27 +1180,48 @@ function drawFib(d,sel=false) {
 function drawRR(d,sel=false) {
   const s = d.settings;
   const [entry,target,stop] = d.points;
-  const xe=pToX(entry), xt=pToX(target), ye=pToY(entry), yt=pToY(target), ys=pToY(stop);
-  if ([xe,xt,ye,yt,ys].some(v => v == null)) return;
-  const left=Math.min(xe,xt), right=Math.max(xe,xt)+90, w=right-left;
+  const xe=pToX(entry), xt=pToX(target), xs=pToX(stop), ye=pToY(entry), yt=pToY(target), ys=pToY(stop);
+  if ([xe,xt,xs,ye,yt,ys].some(v => v == null)) return;
+
+  const mode = s.mode === "short" ? "short" : "long";
   const profitColor=s.profitColor || "#22c55e", lossColor=s.lossColor || "#ef4444";
+  const left=Math.min(xe,xt,xs);
+  const right=Math.max(xe,xt,xs)+90;
+  const w=right-left;
+
   ctx.save();
   ctx.fillStyle=colorWithOpacity(profitColor,s.fillOpacity);
   ctx.fillRect(left,Math.min(ye,yt),w,Math.abs(yt-ye));
   ctx.fillStyle=colorWithOpacity(lossColor,s.fillOpacity);
   ctx.fillRect(left,Math.min(ye,ys),w,Math.abs(ys-ye));
+
   ctx.lineWidth=s.width;
-  ctx.strokeStyle=profitColor; ctx.strokeRect(left,Math.min(ye,yt),w,Math.abs(yt-ye));
-  ctx.strokeStyle=lossColor; ctx.strokeRect(left,Math.min(ye,ys),w,Math.abs(ys-ye));
+  ctx.setLineDash(dashFor(s.lineStyle));
+  ctx.strokeStyle=profitColor;
+  ctx.strokeRect(left,Math.min(ye,yt),w,Math.abs(yt-ye));
+  ctx.strokeStyle=lossColor;
+  ctx.strokeRect(left,Math.min(ye,ys),w,Math.abs(ys-ye));
+
+  drawLine(left,ye,right,ye,"#f8fafc",1,[4,4]);
+  drawLine(left,yt,right,yt,profitColor,1,[]);
+  drawLine(left,ys,right,ys,lossColor,1,[]);
   ctx.restore();
-  const risk=Math.abs(entry.price-stop.price), reward=Math.abs(target.price-entry.price), rr=risk>0?(reward/risk).toFixed(2):"—";
+
+  const risk=Math.abs(entry.price-stop.price);
+  const reward=Math.abs(target.price-entry.price);
+  const rr=risk>0?(reward/risk).toFixed(2):"—";
+  const riskPct=s.showRiskPercent && s.accountSize ? ` | Risk ${s.riskPercent || 1}%` : "";
+
   if (s.showLabels) {
-    const mode = (s.mode || "long").toUpperCase();
-    drawLabel(`${mode} Entry ${fmtPrice(entry.price)}`,right-170,ye,"#111827");
-    drawLabel(`TP ${fmtPrice(target.price)}${s.showRR ? "  RR "+rr : ""}`,right-160,yt,"#15803d");
-    drawLabel(`SL ${fmtPrice(stop.price)}`,right-135,ys,"#991b1b");
+    drawLabel(`${mode.toUpperCase()} Entry ${fmtPrice(entry.price)}`,right-185,ye,"#111827");
+    drawLabel(`Target ${fmtPrice(target.price)}${s.showRR ? " | RR "+rr : ""}`,right-190,yt,"#15803d");
+    drawLabel(`Stop ${fmtPrice(stop.price)}${riskPct}`,right-150,ys,"#991b1b");
   }
-  if (sel) { anchor(xe,ye,true); anchor(xt,yt,true); anchor(pToX(stop),ys,true); }
+  if (sel) {
+    anchor(xe,ye,true);
+    anchor(xt,yt,true);
+    anchor(xs,ys,true);
+  }
 }
 
 function drawOne(d,temp=false) {
@@ -1546,12 +1628,14 @@ canvas.addEventListener("mousemove", e => {
     drawOverlay();
   } else if (activeTool === "edit") {
     const h = hitTest(p.x,p.y);
+    canvas.classList.toggle("anchor-hover", !!h && h.hit.kind === "anchor");
+    canvas.classList.toggle("move-hover", !!h && h.hit.kind !== "anchor");
     canvas.style.cursor = h ? (h.hit.kind === "anchor" ? "grab" : "move") : "default";
   }
 });
 
 window.addEventListener("mouseup", () => {
-  canvas.classList.remove("dragging");
+  canvas.classList.remove("dragging", "anchor-hover", "move-hover");
   if (dragMode) {
     canvas.classList.remove("dragging");
     saveDrawings();
@@ -1575,15 +1659,19 @@ canvas.addEventListener("click", e => {
   if (pendingPoints.length >= neededPoints(activeTool)) {
     addDrawing([...pendingPoints]);
     setTool("edit");
-    toast("Drawing added. Drag anchors or open Settings.");
+    toast(activeTool === "longpos" || activeTool === "shortpos" ? "Position added at 1:1. Drag Entry/Target/Stop to adjust." : "Drawing added. Drag anchors or open Settings.");
   } else {
-    toast(`${activeTool.toUpperCase()}: click point ${pendingPoints.length + 1} of ${neededPoints(activeTool)}`);
+    const toolName = activeTool === "longpos" ? "LONG" : activeTool === "shortpos" ? "SHORT" : activeTool.toUpperCase();
+    const pointName = (activeTool === "longpos" || activeTool === "shortpos") ? ["Entry","Target"][pendingPoints.length] : `point ${pendingPoints.length + 1}`;
+    const extra = (activeTool === "longpos" || activeTool === "shortpos") ? " · Stop auto 1:1" : "";
+    toast(`${toolName}: click ${pointName} of ${neededPoints(activeTool)}${extra}`);
   }
   drawOverlay();
 });
 
 canvas.addEventListener("mouseleave", () => {
   hoverPoint = null;
+  canvas.classList.remove("anchor-hover", "move-hover");
   if (!dragMode) drawOverlay();
 });
 
@@ -1728,10 +1816,24 @@ const toolButtons = {
   trend: els.trendBtn,
   ray: els.rayBtn,
   rect: els.rectBtn,
-  fib: els.fibBtn,
-  rr: els.rrBtn
+  fib: els.fibBtn
 };
 Object.entries(toolButtons).forEach(([t,b]) => { if (b) b.onclick = () => setTool(t); });
+
+if (els.rrBtn) {
+  els.rrBtn.onclick = (e) => {
+    els.leftToolFlyout?.classList.toggle("hidden");
+    e.stopPropagation();
+  };
+}
+if (els.longPosBtn) els.longPosBtn.onclick = () => {
+  els.leftToolFlyout?.classList.add("hidden");
+  setTool("longpos");
+};
+if (els.shortPosBtn) els.shortPosBtn.onclick = () => {
+  els.leftToolFlyout?.classList.add("hidden");
+  setTool("shortpos");
+};
 
 els.undoBtn.onclick = undo;
 els.deleteBtn.onclick = () => deleteDrawing();
@@ -1831,8 +1933,8 @@ document.querySelectorAll(".watch").forEach(b => {
 
 document.addEventListener("mousedown", e => {
   if (!toolbarStylePopover.classList.contains("hidden") || !toolbarTemplatePopover.classList.contains("hidden")) {
-    const inside = e.target.closest("#toolbarStylePopover,#toolbarTemplatePopover,#selectionToolbar");
-    if (!inside) hideToolbarPopovers();
+    const inside = e.target.closest("#toolbarStylePopover,#toolbarTemplatePopover,#selectionToolbar,#leftToolFlyout,#rrBtn");
+    if (!inside) { hideToolbarPopovers(); els.leftToolFlyout?.classList.add("hidden"); }
   }
 });
 
@@ -1841,6 +1943,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     if (els.shell.classList.contains("max-mode")) els.shell.classList.remove("max-mode");
     setTool("cursor");
+    els.leftToolFlyout?.classList.add("hidden");
     setTimeout(safeResize,80);
   }
   if (e.key === "Delete" || e.key === "Backspace") {

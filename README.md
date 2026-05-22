@@ -1,89 +1,73 @@
-# WhaleX Chart Platform v2.18 — Draggable Toolbar + Templates
+# WhaleX Chart Platform v2.20 — RR 1:1 + Drag All Tools
 
 ## Main goal
 
-Make the selected-drawing toolbar work more like TradingView.
+Fix the Long/Short position tool behavior and make every plotted tool draggable like TradingView.
 
-## Added
+## Long / Short position behavior
 
-### Draggable floating toolbar
+### Long Position
 
-- Toolbar now has a drag handle: `⋮⋮`
-- Drag the toolbar anywhere over the chart
-- Position is saved per symbol in browser localStorage
-- Toolbar no longer stays force-fixed near the object once dragged
+- 1st click = Entry
+- 2nd click = Target
+- Stop is auto-created below Entry at equal distance
+- Default RR = 1:1
+- User can drag Entry / Target / Stop after placement
 
-### Toolbar actions for all tools
+### Short Position
 
-Available for Fib, Trendline, Ray, H-Line, Rectangle and RR:
+- 1st click = Entry
+- 2nd click = Target
+- Stop is auto-created above Entry at equal distance
+- Default RR = 1:1
+- User can drag Entry / Target / Stop after placement
 
-- Settings
-- Templates
-- Style
-- Width
-- Lock / unlock
-- Hide / show
-- Clone
-- Delete
-- Move mode
+## Drag behavior
 
-### Quick Style popover
+In Edit mode:
 
-From the toolbar:
-
-- Color
-- Width
-- Line style
-- Labels on/off
-- More settings
-
-### Quick Template popover
-
-From the toolbar:
-
-- Save current style as template
-- Apply saved template
-- Set template as default
-- Delete template
-
-This works per tool type:
-- Fib templates
-- TL templates
-- Ray templates
-- H-Line templates
-- Rectangle templates
-- RR templates
+- Click/drag anchors to resize/edit
+- Click/drag the body of the plotted object to move the full tool
+- Works for:
+  - Fib
+  - Trendline
+  - Ray
+  - Horizontal Line
+  - Rectangle
+  - Long Position
+  - Short Position
 
 ## Kept
 
-- v2.17 drawing behavior polish
-- v2.16 Fib point A to B behavior
-- Tool templates from settings panel
+- v2.19 TV-style left toolbar flyout
+- v2.18 draggable floating toolbar
+- Quick style/template popovers
+- Tool templates for all tools
+- v2.16 Fib point A to Point B behavior
 - Full-height stable chart
 - TV on-chart logo hidden
 - WhaleX branding visible
 - OKX candle fallback
 - Bybit live liquidity
 
-## Suggested test flow
+## Test flow
 
-1. Draw Fib.
-2. Press E and select Fib.
-3. Drag the floating toolbar using the `⋮⋮` handle.
-4. Click Templates from the toolbar.
-5. Save current Fib as a template.
-6. Set it as default.
-7. Draw a new Fib and confirm it uses the saved default.
-
-## Syntax check
-
-JavaScript syntax check: PASS
-
-
+1. Click RR/Forecasting icon on the left toolbar.
+2. Select Long Position.
+3. Click Entry, then Target.
+4. Confirm Stop appears automatically at 1:1.
+5. Press E and drag Entry / Target / Stop.
+6. Drag the body of the position box to move the full tool.
 
 ## Deploy
 
 Upload all files over the existing GitHub repo, commit, then Render:
 Manual Deploy -> Clear build cache & deploy.
 
-Check `/health`; it must show version `2.18.0`.
+Check `/health`; it must show version `2.20.0`.
+
+## Syntax check
+
+JavaScript syntax check: PASS
+
+

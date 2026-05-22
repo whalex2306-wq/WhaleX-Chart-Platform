@@ -354,3 +354,94 @@ body.mode-edit #drawCanvas.dragging{
 .template-box{
   scroll-margin-top:20px;
 }
+
+
+/* v2.19: TV-style left toolbar flyout + Long/Short RR tool */
+.left-tools{
+  position:relative;
+  z-index:22;
+}
+.left-tool-flyout{
+  position:absolute;
+  left:52px;
+  top:134px;
+  width:282px;
+  max-height:calc(100vh - 170px);
+  overflow:auto;
+  background:#ffffff;
+  color:#111827;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  box-shadow:0 16px 55px rgba(0,0,0,.24);
+  padding:10px;
+  z-index:28;
+}
+.left-tool-flyout.hidden{display:none}
+.flyout-section-title{
+  margin:8px 4px 7px;
+  font-size:11px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:#6b7280;
+  font-weight:900;
+}
+.flyout-item{
+  width:100%;
+  height:40px;
+  border:0;
+  background:#fff;
+  color:#111827;
+  display:grid;
+  grid-template-columns:30px 1fr 22px;
+  align-items:center;
+  gap:8px;
+  text-align:left;
+  border-radius:8px;
+  padding:0 8px;
+  cursor:pointer;
+  font-size:14px;
+}
+.flyout-item:hover{
+  background:#f3f4f6;
+}
+.flyout-item.active{
+  background:#111827;
+  color:#fff;
+}
+.flyout-item.disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+.flyout-icon{
+  font-weight:900;
+  font-size:12px;
+  color:inherit;
+}
+.flyout-star{
+  color:#111827;
+}
+.flyout-item.active .flyout-star{
+  color:#fbbf24;
+}
+.forecast-tool.active{
+  background:#111827!important;
+  color:#fff!important;
+}
+.rr-label{
+  font-weight:900;
+}
+
+
+/* v2.20: drag-any-tool polish + RR 1:1 */
+body.mode-edit #drawCanvas{
+  cursor:default!important;
+}
+body.mode-edit #drawCanvas.move-hover{
+  cursor:move!important;
+}
+body.mode-edit #drawCanvas.anchor-hover{
+  cursor:grab!important;
+}
+body.mode-edit #drawCanvas.dragging{
+  cursor:grabbing!important;
+}

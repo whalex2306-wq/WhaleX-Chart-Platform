@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>WhaleX Chart Platform v2.18</title>
+  <title>WhaleX Chart Platform v2.20</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="/static/whalex-logo.png" />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -57,17 +57,58 @@
         <button id="rayBtn" class="tool" title="Ray">➚</button>
         <button id="rectBtn" class="tool" title="Rectangle Zone">▭</button>
         <button id="fibBtn" class="tool" title="Fib Retracement">F</button>
-        <button id="rrBtn" class="tool" title="Risk Reward">RR</button>
+        <button id="rrBtn" class="tool forecast-tool" title="Forecasting tools">⌁</button>
         <div class="tool-sep"></div>
         <button id="undoBtn" class="tool" title="Undo last">↶</button>
         <button id="deleteBtn" class="tool danger" title="Delete selected">⌫</button>
       </aside>
 
+        <div id="leftToolFlyout" class="left-tool-flyout hidden">
+          <div class="flyout-section-title">Forecasting</div>
+          <button id="longPosBtn" class="flyout-item" data-tool="longpos">
+            <span class="flyout-icon">L</span>
+            <span>Long position</span>
+            <span class="flyout-star">★</span>
+          </button>
+          <button id="shortPosBtn" class="flyout-item" data-tool="shortpos">
+            <span class="flyout-icon">S</span>
+            <span>Short position</span>
+            <span class="flyout-star">★</span>
+          </button>
+          <button class="flyout-item disabled">
+            <span class="flyout-icon">↕</span>
+            <span>Position forecast</span>
+          </button>
+          <button class="flyout-item disabled">
+            <span class="flyout-icon">▥</span>
+            <span>Bar pattern</span>
+          </button>
+          <div class="flyout-section-title">Volume-based</div>
+          <button class="flyout-item disabled">
+            <span class="flyout-icon">VW</span>
+            <span>Anchored VWAP</span>
+          </button>
+          <button class="flyout-item disabled">
+            <span class="flyout-icon">VP</span>
+            <span>Fixed range volume profile</span>
+          </button>
+          <div class="flyout-section-title">Measures</div>
+          <button class="flyout-item disabled">
+            <span class="flyout-icon">↔</span>
+            <span>Price range</span>
+          </button>
+          <button class="flyout-item disabled">
+            <span class="flyout-icon">⤢</span>
+            <span>Date and price range</span>
+          </button>
+        </div>
+
+
       <main class="chart-area title-hidden" id="chartArea">
         <div class="title-row hidden" id="titleRow">
           <div>
             <h1 id="title">BTCUSDT · Bybit Liquidity</h1>
-            <p id="subtitle">WhaleX branded chart · draggable toolbars/templates</p>
+            <p id="subtitle">WhaleX branded chart · RR 1:1 + drag all tools</p>
           </div>
           <div class="source-pills">
             <span id="historySource">Candles: loading</span>
