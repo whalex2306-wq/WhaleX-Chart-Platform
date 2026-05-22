@@ -1,4 +1,4 @@
-console.log("WhaleX Chart Platform JS v3.6.0 loaded");
+console.log("WhaleX Chart Platform JS v3.7.0 loaded");
 
 const HARD = { bucket: 100, minM: 5, maxLines: 10, publishMs: 750 };
 
@@ -167,17 +167,31 @@ const indicatorPanelStack = document.createElement("div");
 indicatorPanelStack.id = "indicatorPanelStack";
 indicatorPanelStack.className = "indicator-panel-stack hidden";
 indicatorPanelStack.innerHTML = `
-  <div id="volumeSubPanel" class="indicator-subpanel hidden">
+  <div id="volumeSubPanel" class="indicator-subpanel hidden" data-panel="volume">
     <div class="indicator-panel-title" id="volumePanelTitle">Volume</div>
     <div class="indicator-panel-value" id="volumePanelValue"></div>
+    <div class="indicator-panel-controls">
+      <button id="volumeAutoScaleBtn" title="Auto scale">A</button>
+      <button id="volumeResetScaleBtn" title="Reset scale">↺</button>
+    </div>
     <canvas id="volumePanelCanvas"></canvas>
+    <div id="volumePanelScale" class="indicator-panel-scale" data-panel-scale="volume"></div>
+    <div id="volumeLastLabel" class="indicator-panel-last-label hidden"></div>
     <div id="volumePanelHint" class="indicator-panel-hint"></div>
+    <div class="indicator-panel-scroll-hint">Wheel: scale · Shift-wheel: scroll · Double-click scale: auto</div>
   </div>
-  <div id="rsiSubPanel" class="indicator-subpanel hidden">
+  <div id="rsiSubPanel" class="indicator-subpanel hidden" data-panel="rsi">
     <div class="indicator-panel-title" id="rsiPanelTitle2">RSI 14</div>
     <div class="indicator-panel-value" id="rsiPanelValue"></div>
+    <div class="indicator-panel-controls">
+      <button id="rsiAutoScaleBtn" title="Auto scale">A</button>
+      <button id="rsiResetScaleBtn" title="Reset scale">↺</button>
+    </div>
     <canvas id="rsiPanelCanvas2"></canvas>
+    <div id="rsiPanelScale" class="indicator-panel-scale" data-panel-scale="rsi"></div>
+    <div id="rsiLastLabel" class="indicator-panel-last-label hidden"></div>
     <div id="rsiPanelHint" class="indicator-panel-hint"></div>
+    <div class="indicator-panel-scroll-hint">Wheel: scale · Shift-wheel: scroll · Double-click scale: auto</div>
   </div>
 `;
 shellEl.appendChild(indicatorPanelStack);
@@ -188,6 +202,10 @@ const volumePanelCtx = volumePanelCanvas.getContext("2d");
 const volumePanelTitle = document.getElementById("volumePanelTitle");
 const volumePanelValue = document.getElementById("volumePanelValue");
 const volumePanelHint = document.getElementById("volumePanelHint");
+const volumePanelScale = document.getElementById("volumePanelScale");
+const volumeLastLabel = document.getElementById("volumeLastLabel");
+const volumeAutoScaleBtn = document.getElementById("volumeAutoScaleBtn");
+const volumeResetScaleBtn = document.getElementById("volumeResetScaleBtn");
 
 const rsiSubPanel = document.getElementById("rsiSubPanel");
 const rsiPanelCanvas2 = document.getElementById("rsiPanelCanvas2");
@@ -195,6 +213,10 @@ const rsiPanelCtx2 = rsiPanelCanvas2.getContext("2d");
 const rsiPanelTitle2 = document.getElementById("rsiPanelTitle2");
 const rsiPanelValue = document.getElementById("rsiPanelValue");
 const rsiPanelHint = document.getElementById("rsiPanelHint");
+const rsiPanelScale = document.getElementById("rsiPanelScale");
+const rsiLastLabel = document.getElementById("rsiLastLabel");
+const rsiAutoScaleBtn = document.getElementById("rsiAutoScaleBtn");
+const rsiResetScaleBtn = document.getElementById("rsiResetScaleBtn");
 
 
 
@@ -2668,6 +2690,261 @@ function redrawIndicators() {
   updateIndicatorLegend();
 }
 
+
+const panelScaleState = {
+  volume: { auto:true, min:null, max:null },
+  rsi: { auto:true, min:null, max:null }
+};
+let panelScaleDrag = null;
+
+function panelScaleKey() {
+  return "whalex_indicator_panel_scales_v370";
+}
+
+function loadPanelScaleState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(panelScaleKey()) || "{}");
+    ["volume","rsi"].forEach(k => {
+      if (saved[k]) panelScaleState[k] = { ...panelScaleState[k], ...saved[k] };
+    });
+  } catch(e) {}
+}
+
+function savePanelScaleState() {
+  localStorage.setItem(panelScaleKey(), JSON.stringify(panelScaleState));
+}
+
+function resetPanelScale(panel) {
+  panelScaleState[panel] = { auto:true, min:null, max:null };
+  savePanelScaleState();
+  drawIndicatorPanels();
+}
+
+function setPanelManualScale(panel, min, max) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return;
+  panelScaleState[panel] = { auto:false, min, max };
+  savePanelScaleState();
+}
+
+function valueScaleFrom(values, panel, fallbackMin=0, fallbackMax=100, paddingRatio=0.08) {
+  const state = panelScaleState[panel] || { auto:true };
+  if (!state.auto && Number.isFinite(state.min) && Number.isFinite(state.max) && state.max > state.min) {
+    return { min:state.min, max:state.max, auto:false };
+  }
+
+  const nums = values.filter(v => Number.isFinite(v));
+  let min = nums.length ? Math.min(...nums) : fallbackMin;
+  let max = nums.length ? Math.max(...nums) : fallbackMax;
+
+  if (panel === "volume") min = 0;
+  if (panel === "rsi") {
+    min = Math.min(0, min);
+    max = Math.max(100, max);
+  }
+
+  if (max <= min) max = min + 1;
+  const pad = (max - min) * paddingRatio;
+  return { min:min - (panel === "volume" ? 0 : pad), max:max + pad, auto:true };
+}
+
+function yFromScale(value, scale, padT, h) {
+  if (!scale || scale.max <= scale.min) return padT + h;
+  return padT + (scale.max - value) / (scale.max - scale.min) * h;
+}
+
+function valueFromPanelY(y, scale, padT, h) {
+  return scale.max - ((y - padT) / h) * (scale.max - scale.min);
+}
+
+function formatPanelValue(panel, v) {
+  if (!Number.isFinite(v)) return "";
+  if (panel === "volume") {
+    if (Math.abs(v) >= 1_000_000) return (v/1_000_000).toFixed(2) + "M";
+    if (Math.abs(v) >= 1_000) return (v/1_000).toFixed(1) + "K";
+    return Number(v).toFixed(v >= 100 ? 0 : 2);
+  }
+  return Number(v).toFixed(2);
+}
+
+function drawPanelScale(ctx2, rect, panel, scale, padT, h, latestValue=null, latestColor="#d6a93d") {
+  const x = rect.width - 58;
+  const labelX = rect.width - 52;
+  const levels = [scale.max, (scale.max + scale.min) / 2, scale.min];
+
+  ctx2.save();
+  ctx2.font = "10px Inter, Arial";
+  ctx2.textAlign = "left";
+  ctx2.textBaseline = "middle";
+  ctx2.fillStyle = "rgba(203,213,225,.9)";
+  ctx2.strokeStyle = "rgba(148,163,184,.22)";
+  ctx2.lineWidth = 1;
+
+  levels.forEach(v => {
+    const y = yFromScale(v, scale, padT, h);
+    if (y < padT - 2 || y > padT + h + 2) return;
+    ctx2.beginPath();
+    ctx2.moveTo(x, y);
+    ctx2.lineTo(rect.width - 6, y);
+    ctx2.stroke();
+    ctx2.fillText(formatPanelValue(panel, v), labelX, y);
+  });
+  ctx2.restore();
+
+  const label = panel === "volume" ? volumeLastLabel : rsiLastLabel;
+  if (label && Number.isFinite(latestValue)) {
+    const y = yFromScale(latestValue, scale, padT, h);
+    label.textContent = formatPanelValue(panel, latestValue);
+    label.style.top = Math.max(padT + 3, Math.min(padT + h - 3, y)) + "px";
+    label.style.background = latestColor || "#d6a93d";
+    label.classList.remove("hidden");
+  } else if (label) {
+    label.classList.add("hidden");
+  }
+
+  const autoBtn = panel === "volume" ? volumeAutoScaleBtn : rsiAutoScaleBtn;
+  if (autoBtn) autoBtn.classList.toggle("active", panelScaleState[panel]?.auto !== false);
+}
+
+function zoomPanelScale(panel, factor, anchorRatio=0.5) {
+  const state = panelScaleState[panel] || { auto:true };
+  let min = Number.isFinite(state.min) ? state.min : (panel === "volume" ? 0 : 0);
+  let max = Number.isFinite(state.max) ? state.max : (panel === "volume" ? 1 : 100);
+
+  // If auto, materialize current visible scale first.
+  if (state.auto) {
+    const visible = collectPanelVisibleValues(panel);
+    const sc = valueScaleFrom(visible.values, panel, visible.fallbackMin, visible.fallbackMax);
+    min = sc.min; max = sc.max;
+  }
+
+  const anchor = min + (max - min) * anchorRatio;
+  const newMin = anchor - (anchor - min) * factor;
+  const newMax = anchor + (max - anchor) * factor;
+  setPanelManualScale(panel, newMin, newMax);
+  drawIndicatorPanels();
+}
+
+function shiftPanelScale(panel, deltaRatio) {
+  const state = panelScaleState[panel] || { auto:true };
+  let min = state.min, max = state.max;
+  if (state.auto || !Number.isFinite(min) || !Number.isFinite(max)) {
+    const visible = collectPanelVisibleValues(panel);
+    const sc = valueScaleFrom(visible.values, panel, visible.fallbackMin, visible.fallbackMax);
+    min = sc.min; max = sc.max;
+  }
+  const span = max - min;
+  setPanelManualScale(panel, min + span * deltaRatio, max + span * deltaRatio);
+  drawIndicatorPanels();
+}
+
+function scrollChartByLogical(delta) {
+  try {
+    const range = chart.timeScale().getVisibleLogicalRange();
+    if (!range) return;
+    chart.timeScale().setVisibleLogicalRange({ from:range.from + delta, to:range.to + delta });
+  } catch(e) {}
+}
+
+function collectPanelVisibleValues(panel) {
+  const rows = visiblePanelCandles(320);
+  if (panel === "volume") {
+    const maAll = indicatorSettings.volume.showMA ? volumeMAData(rawCandles, indicatorSettings.volume) : [];
+    const timeSet = new Set(rows.map(c => String(c.time)));
+    const ma = maAll.filter(p => timeSet.has(String(p.time)));
+    return {
+      values:[...rows.map(c => c.volume || 0), ...ma.map(p => p.value || 0)],
+      fallbackMin:0,
+      fallbackMax:1
+    };
+  }
+
+  const period = Math.max(1, Number(indicatorSettings.rsi.length || 14));
+  const all = rsiData(rawCandles, period);
+  const timeSet = new Set(rows.map(c => String(c.time)));
+  const data = all.filter(p => timeSet.has(String(p.time)));
+  const vals = data.map(p => p.value);
+  vals.push(Number(indicatorSettings.rsi.upper || 70), Number(indicatorSettings.rsi.middle || 50), Number(indicatorSettings.rsi.lower || 30));
+  return { values:vals, fallbackMin:0, fallbackMax:100 };
+}
+
+function bindPanelScaleInteractions() {
+  loadPanelScaleState();
+
+  const bind = (panel, panelEl, scaleEl, autoBtn, resetBtn) => {
+    if (!panelEl || !scaleEl) return;
+
+    autoBtn?.addEventListener("click", e => {
+      e.stopPropagation();
+      resetPanelScale(panel);
+    });
+    resetBtn?.addEventListener("click", e => {
+      e.stopPropagation();
+      resetPanelScale(panel);
+    });
+
+    scaleEl.addEventListener("dblclick", e => {
+      e.preventDefault();
+      resetPanelScale(panel);
+    });
+
+    scaleEl.addEventListener("pointerdown", e => {
+      const rect = scaleEl.getBoundingClientRect();
+      const visible = collectPanelVisibleValues(panel);
+      const sc = valueScaleFrom(visible.values, panel, visible.fallbackMin, visible.fallbackMax);
+      panelScaleDrag = {
+        panel,
+        startY:e.clientY,
+        startMin:sc.min,
+        startMax:sc.max,
+        height:Math.max(1, rect.height)
+      };
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    panelEl.addEventListener("wheel", e => {
+      if (panelEl.classList.contains("hidden")) return;
+      const rect = panelEl.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Horizontal panel scroll: Shift-wheel or touchpad horizontal wheel.
+      if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        scrollChartByLogical((e.deltaX || e.deltaY) * 0.025);
+        e.preventDefault();
+        return;
+      }
+
+      // Vertical scale zoom. Strongest when mouse is on the right scale,
+      // but allowed anywhere in the indicator pane for faster workflow.
+      const factor = e.deltaY > 0 ? 1.12 : 0.89;
+      const anchorRatio = Math.max(0.02, Math.min(0.98, y / Math.max(1, rect.height)));
+      zoomPanelScale(panel, factor, 1 - anchorRatio);
+      e.preventDefault();
+    }, { passive:false });
+  };
+
+  bind("volume", volumeSubPanel, volumePanelScale, volumeAutoScaleBtn, volumeResetScaleBtn);
+  bind("rsi", rsiSubPanel, rsiPanelScale, rsiAutoScaleBtn, rsiResetScaleBtn);
+
+  document.addEventListener("pointermove", e => {
+    if (!panelScaleDrag) return;
+    const { panel, startY, startMin, startMax, height } = panelScaleDrag;
+    const span = startMax - startMin;
+    const deltaRatio = (e.clientY - startY) / Math.max(1, height);
+    setPanelManualScale(panel, startMin + span * deltaRatio, startMax + span * deltaRatio);
+    drawIndicatorPanels();
+  });
+
+  document.addEventListener("pointerup", () => {
+    if (panelScaleDrag) {
+      savePanelScaleState();
+      panelScaleDrag = null;
+    }
+  });
+}
+
+
 function visiblePanelCandles(maxFallback=220) {
   if (!rawCandles.length) return [];
   let range = null;
@@ -2720,13 +2997,16 @@ function updatePanelLayout() {
 function drawVolumePanel() {
   updatePanelLayout();
   const showVol = indicatorSettings.volume.enabled && indicatorSettings.volume.visible !== false;
-  if (!showVol) return;
+  if (!showVol) {
+    volumeLastLabel?.classList.add("hidden");
+    return;
+  }
 
   const rect = resizePanelCanvas(volumePanelCanvas, volumePanelCtx);
   const rows = visiblePanelCandles(320);
   if (!rows.length) return;
 
-  const padL=42, padR=12, padT=24, padB=16;
+  const padL=42, padR=72, padT=24, padB=16;
   const w=rect.width-padL-padR;
   const h=rect.height-padT-padB;
 
@@ -2735,7 +3015,7 @@ function drawVolumePanel() {
   let ma = maAll.filter(p => visibleTime.has(String(p.time)));
   if (!ma.length && maAll.length) ma = maAll.slice(-rows.length);
 
-  const maxV = Math.max(1, ...rows.map(c => c.volume || 0), ...ma.map(p => p.value || 0));
+  const scale = valueScaleFrom([...rows.map(c => c.volume || 0), ...ma.map(p => p.value || 0)], "volume", 0, 1);
   const alpha = Math.max(5,Math.min(100,Number(indicatorSettings.volume.opacity || 28))) / 100;
 
   const hexToRgb = hex => {
@@ -2747,7 +3027,7 @@ function drawVolumePanel() {
     return `rgba(${r},${g},${b},${a})`;
   };
   const xFor = i => padL + (i/Math.max(1,rows.length-1))*w;
-  const yForVol = v => padT + h - (Math.max(0,v)/maxV)*h;
+  const yForVol = v => yFromScale(v, scale, padT, h);
   const barW = Math.max(2, Math.min(12, w/Math.max(1,rows.length) * 0.72));
 
   volumePanelCtx.strokeStyle = "rgba(148,163,184,.18)";
@@ -2760,7 +3040,8 @@ function drawVolumePanel() {
   rows.forEach((c,i) => {
     const x = xFor(i);
     const y = yForVol(c.volume || 0);
-    const bh = padT + h - y;
+    const baseY = yForVol(0);
+    const bh = Math.max(1, baseY - y);
     volumePanelCtx.fillStyle = c.close >= c.open ? rgba(indicatorSettings.volume.upColor, alpha) : rgba(indicatorSettings.volume.downColor, alpha);
     volumePanelCtx.fillRect(x-barW/2, y, barW, bh);
   });
@@ -2788,21 +3069,24 @@ function drawVolumePanel() {
   }
 
   const latest = rows[rows.length-1];
+  const latestVol = latest?.volume || 0;
   volumePanelTitle.textContent = indicatorDisplayName("volume");
   volumePanelValue.textContent = latest?.volume ? `Vol ${Number(latest.volume).toLocaleString()}` : "";
   if (volumePanelHint) volumePanelHint.textContent = hint;
+  drawPanelScale(volumePanelCtx, rect, "volume", scale, padT, h, latestVol, latest?.close >= latest?.open ? indicatorSettings.volume.upColor : indicatorSettings.volume.downColor);
 }
 
 function drawRSI() {
   updatePanelLayout();
   const showRsi = indicatorSettings.rsi.enabled && indicatorSettings.rsi.visible !== false;
   if (!showRsi || !rawCandles.length) {
+    rsiLastLabel?.classList.add("hidden");
     if (rsiPanelHint) rsiPanelHint.textContent = "";
     return;
   }
 
   const rect = resizePanelCanvas(rsiPanelCanvas2, rsiPanelCtx2);
-  const rows = visiblePanelCandles(260);
+  const rows = visiblePanelCandles(320);
   const period = Math.max(1,Number(indicatorSettings.rsi.length || 14));
   const all = rsiData(rawCandles,period);
   const timeSet = new Set(rows.map(c => String(c.time)));
@@ -2813,9 +3097,21 @@ function drawRSI() {
     return;
   }
 
-  const padL=36,padR=12,padT=24,padB=14;
+  const padL=36,padR=72,padT=24,padB=14;
   const w=rect.width-padL-padR,h=rect.height-padT-padB;
-  const yFor=v => padT+(100-v)/100*h;
+
+  const levelValues = [Number(indicatorSettings.rsi.upper || 70), Number(indicatorSettings.rsi.middle || 50), Number(indicatorSettings.rsi.lower || 30)];
+  const visibleValues = [...data.map(p => p.value), ...levelValues];
+
+  let smoothed = [];
+  if (indicatorSettings.rsi.showMA) {
+    smoothed = maOverValues(data, indicatorSettings.rsi.maLength, indicatorSettings.rsi.maType, data.map(x => x.volume || 0), true);
+    visibleValues.push(...smoothed.map(p => p.value));
+  }
+
+  const scale = valueScaleFrom(visibleValues, "rsi", 0, 100, 0.06);
+
+  const yFor=v => yFromScale(v, scale, padT, h);
   const xFor=i => padL+(i/Math.max(1,data.length-1))*w;
 
   const levelRows = [
@@ -2825,6 +3121,7 @@ function drawRSI() {
   ];
   levelRows.forEach(([v,c]) => {
     const y=yFor(Number(v));
+    if (y < padT - 8 || y > padT + h + 8) return;
     rsiPanelCtx2.strokeStyle=c || "rgba(148,163,184,.35)";
     rsiPanelCtx2.lineWidth=1;
     rsiPanelCtx2.beginPath(); rsiPanelCtx2.moveTo(padL,y); rsiPanelCtx2.lineTo(rect.width-padR,y); rsiPanelCtx2.stroke();
@@ -2845,7 +3142,6 @@ function drawRSI() {
   drawLine(data, indicatorSettings.rsi.color || "#d6a93d", 2);
 
   if (indicatorSettings.rsi.showMA) {
-    const smoothed = maOverValues(data, indicatorSettings.rsi.maLength, indicatorSettings.rsi.maType, data.map(x => x.volume || 0));
     const offset = data.length - smoothed.length;
     if (smoothed.length) drawLine(smoothed, indicatorSettings.rsi.maColor || "#a78bfa", 2, offset);
 
@@ -2877,6 +3173,7 @@ function drawRSI() {
   rsiPanelTitle2.textContent = indicatorDisplayName("rsi");
   rsiPanelValue.textContent = last ? `RSI ${Number(last.value).toFixed(2)}` : "";
   if (rsiPanelHint) rsiPanelHint.textContent = rawCandles.length < period + 2 ? `Needs at least ${period + 2} candles` : "";
+  drawPanelScale(rsiPanelCtx2, rect, "rsi", scale, padT, h, last?.value, indicatorSettings.rsi.color || "#d6a93d");
 }
 
 function drawIndicatorPanels() {
@@ -2979,12 +3276,13 @@ chart.subscribeCrosshairMove(param => {
   els.vVal.textContent = Number(c.volume || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 });
 
-chart.timeScale().subscribeVisibleTimeRangeChange(() => drawOverlay());
+chart.timeScale().subscribeVisibleTimeRangeChange(() => { drawOverlay(); drawIndicatorPanels(); });
 
 const ro = new ResizeObserver(() => safeResize());
 ro.observe(shellEl);
 try { ro.observe(document.querySelector(".chart-area")); } catch(e) {}
 window.addEventListener("resize", safeResize);
+bindPanelScaleInteractions();
 
 els.connectBtn.onclick = connect;
 els.fitBtn.onclick = () => resetChartView();

@@ -1,90 +1,75 @@
-# WhaleX Chart Platform v3.6 — Indicator Validation Fix
+# WhaleX Chart Platform v3.7 — Indicator Scale / Auto / Scroll
 
-## What I checked
+## Main fix
 
-I reviewed the current indicator code flow and updated the parts that were still not behaving close enough to TradingView's indicator workflow.
+Added TradingView-style indicator panel controls for the bottom indicator panes.
 
-## Fixed / Updated
+## Added to indicator panels
 
-### 1. Volume placement
+### 1. Right-side scale
 
-Volume now renders in a dedicated bottom panel, not on the main price scale.
+Volume and RSI panels now have their own right-side scale area.
 
-This prevents:
-- candles getting compressed
-- volume hiding price
-- volume overlapping RSI badly
+- Top / middle / bottom scale labels
+- Latest-value badge
+- Separate scaling from main price chart
 
-### 2. Multiple indicator placement
+### 2. Auto adjust
 
-Volume and RSI use a dynamic stacked panel system.
+Each indicator panel now has:
 
-If one indicator panel is active:
-- price chart reserves smaller bottom space
+- `A` button = Auto scale / Auto adjust
+- `↺` button = Reset scale
 
-If two panels are active:
-- price chart reserves more bottom space
-- Volume and RSI stack separately
+Double-clicking the right-side panel scale also resets to auto.
 
-### 3. Volume MA visibility
+### 3. Manual vertical scale
 
-Volume MA is now drawn directly in the Volume panel.
+Inside Volume or RSI panel:
 
-Fixed:
-- SMA/EMA/SMMA-RMA/WMA/VWMA line not visible
-- large MA values like 500 not showing clearly
+- Mouse wheel = zoom indicator scale
+- Right-side scale drag = scroll/shift indicator values vertically
+- Auto button turns active when panel is back in auto scale
 
-Added:
-- partial MA option for Volume MA
-- hint if MA length is larger than loaded candle history
+### 4. Panel scroll
 
-### 4. More candle history
+Inside Volume or RSI panel:
 
-Default candle history request increased from 500 to 1000 where supported, so longer MA lengths like 500 have a better chance to plot.
+- Shift + mouse wheel = horizontal chart scroll
+- Touchpad horizontal wheel = horizontal chart scroll
 
-### 5. RSI panel
+This keeps indicator panels synced with the candle chart visible range.
 
-RSI now uses the new stacked panel canvas, not the old overlay panel.
+### 5. Multiple indicators
 
-Added hints if RSI does not have enough candles to calculate.
+Volume and RSI remain in separate stacked panels and now both have their own scale controls.
 
-### 6. Chart visible-range redraw
+## Kept from v3.6
 
-Indicator panels redraw when the visible chart range changes, so panning/zooming should keep panels aligned better.
+- Volume panel
+- Volume MA visible inside panel
+- RSI panel
+- Partial Volume MA for long lengths like SMA 500
+- Indicator manager with Inputs / Style / Visibility
+- MA / VWAP / RSI / Volume settings
+- WhaleX Liquidity / Orderflow placeholders
 
-## Still not claiming
-
-This is closer, but I am still not claiming it is 100% TradingView identical.
-
-Remaining TV-level refinements:
-- draggable/resizable indicator panes
-- exact TradingView pane scale labels on right side
-- exact VWAP band/fill style
-- exact RSI style/fill options
-- exact Volume scale UX
-
-## Validation checklist after deploy
+## Test flow
 
 1. Add Volume
-2. Open Volume settings
-3. Enable Volume MA
-4. Try SMA 20
-5. Try SMA 500
+2. Enable Volume MA 500
+3. Use mouse wheel inside Volume panel to zoom scale
+4. Drag the Volume panel right-side scale vertically
+5. Click `A` to auto-adjust
 6. Add RSI also
-7. Confirm Volume and RSI appear in separate panels
-8. Remove RSI
-9. Confirm Volume panel stays clean
-10. Add MA overlay and VWAP, confirm they stay on price chart
+7. Repeat scale tests inside RSI panel
+8. Use Shift + mouse wheel inside panel to scroll horizontally
 
 ## Syntax check
 
 JavaScript syntax check: PASS
 
 
-
-## Health check
-
-Backend version patched: True
 
 ## Deploy
 
@@ -96,4 +81,4 @@ Then hard refresh:
 - Mac: Cmd + Shift + R
 - Windows: Ctrl + F5
 
-Check `/health`; it must show version `3.6.0`.
+Check `/health`; it must show version `3.7.0`.

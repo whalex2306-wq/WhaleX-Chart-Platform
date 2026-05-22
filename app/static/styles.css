@@ -1001,3 +1001,91 @@ body.mode-edit #drawCanvas.dragging{
   font-weight:800;
   margin:8px 0;
 }
+
+
+/* v3.7: indicator scale + auto adjust + panel scroll */
+.indicator-subpanel{
+  pointer-events:auto;
+}
+.indicator-panel-controls{
+  position:absolute;
+  right:70px;
+  top:6px;
+  z-index:4;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  pointer-events:auto;
+}
+.indicator-panel-controls button{
+  height:22px;
+  min-width:24px;
+  border:1px solid rgba(148,163,184,.35);
+  border-radius:6px;
+  background:rgba(15,23,42,.88);
+  color:#cbd5e1;
+  font-size:11px;
+  font-weight:900;
+  cursor:pointer;
+  padding:0 6px;
+}
+.indicator-panel-controls button.active{
+  background:#d6a93d;
+  border-color:#d6a93d;
+  color:#111827;
+}
+.indicator-panel-controls button:hover{
+  background:#f8fafc;
+  color:#111827;
+}
+.indicator-panel-scale{
+  position:absolute;
+  top:24px;
+  right:0;
+  bottom:14px;
+  width:62px;
+  z-index:3;
+  border-left:1px solid rgba(148,163,184,.16);
+  pointer-events:auto;
+  cursor:ns-resize;
+}
+.indicator-panel-scale::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to left, rgba(7,11,18,.72), rgba(7,11,18,0));
+  pointer-events:none;
+}
+.indicator-panel-last-label{
+  position:absolute;
+  right:5px;
+  z-index:4;
+  min-width:52px;
+  border-radius:5px;
+  padding:2px 5px;
+  font-size:10px;
+  line-height:1.1;
+  text-align:right;
+  font-weight:900;
+  color:#111827;
+  background:#d6a93d;
+  pointer-events:none;
+  transform:translateY(-50%);
+}
+.indicator-panel-hint{
+  right:72px;
+  max-width:70%;
+}
+.indicator-panel-value{
+  right:136px!important;
+}
+.indicator-panel-scroll-hint{
+  position:absolute;
+  right:72px;
+  bottom:7px;
+  z-index:2;
+  color:#475569;
+  font-size:10px;
+  font-weight:800;
+  pointer-events:none;
+}
