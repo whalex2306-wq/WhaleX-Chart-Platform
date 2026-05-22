@@ -1,97 +1,90 @@
-# WhaleX Chart Platform v3.4 — TV Indicator Settings Upgrade
+# WhaleX Chart Platform v3.6 — Indicator Validation Fix
 
-## Main fix
+## What I checked
 
-The indicator settings were still too shallow, especially Volume.
+I reviewed the current indicator code flow and updated the parts that were still not behaving close enough to TradingView's indicator workflow.
 
-v3.4 expands settings for every indicator currently added so the workflow is closer to TradingView's Inputs / Style / Visibility model.
+## Fixed / Updated
 
-## Volume upgraded
+### 1. Volume placement
 
-Inputs:
-- Show volume
-- Show Volume MA
-- MA type: SMA / EMA / SMMA/RMA / WMA / VWMA
-- MA length, default 20
+Volume now renders in a dedicated bottom panel, not on the main price scale.
 
-Style:
-- Up color
-- Down color
-- Opacity
-- Volume MA color
-- Volume MA width
+This prevents:
+- candles getting compressed
+- volume hiding price
+- volume overlapping RSI badly
 
-Visibility:
-- Visible on/off
+### 2. Multiple indicator placement
 
-## RSI upgraded
+Volume and RSI use a dynamic stacked panel system.
 
-Inputs:
-- RSI length
-- Source
-- Upper / Middle / Lower levels
-- Show smoothing MA
-- MA type: SMA / EMA / SMMA/RMA / WMA / VWMA
-- MA length
-- Bollinger Bands toggle
-- BB StdDev
+If one indicator panel is active:
+- price chart reserves smaller bottom space
 
-Style:
-- RSI color
-- MA color
-- Level colors
+If two panels are active:
+- price chart reserves more bottom space
+- Volume and RSI stack separately
 
-Visibility:
-- Visible on/off
+### 3. Volume MA visibility
 
-## VWAP upgraded
+Volume MA is now drawn directly in the Volume panel.
 
-Inputs:
-- Source
-- Anchor period: Session / Week / Month
-- Offset
-- Band calculation: Standard Deviation / Percentage
-- Band 1/2/3 toggles and multipliers
+Fixed:
+- SMA/EMA/SMMA-RMA/WMA/VWMA line not visible
+- large MA values like 500 not showing clearly
 
-Style:
-- VWAP color
-- VWAP width
-- Band color
-- Band width
+Added:
+- partial MA option for Volume MA
+- hint if MA length is larger than loaded candle history
 
-Visibility:
-- Visible on/off
+### 4. More candle history
 
-## Moving Average upgraded
+Default candle history request increased from 500 to 1000 where supported, so longer MA lengths like 500 have a better chance to plot.
 
-Inputs:
-- Type: EMA / SMA / SMMA/RMA / WMA / VWMA
-- Length, default 9
-- Source
-- Offset
+### 5. RSI panel
 
-Style:
-- Color
-- Width
+RSI now uses the new stacked panel canvas, not the old overlay panel.
 
-Visibility:
-- Visible on/off
+Added hints if RSI does not have enough candles to calculate.
 
-## Kept
+### 6. Chart visible-range redraw
 
-- TradingView-style indicator search/list
-- Chart legend for added indicators
-- Per-indicator settings button
-- Show/hide/remove from legend
-- Static cache busting:
-  - app.js?v=3.4.0
-  - styles.css?v=3.4.0
+Indicator panels redraw when the visible chart range changes, so panning/zooming should keep panels aligned better.
+
+## Still not claiming
+
+This is closer, but I am still not claiming it is 100% TradingView identical.
+
+Remaining TV-level refinements:
+- draggable/resizable indicator panes
+- exact TradingView pane scale labels on right side
+- exact VWAP band/fill style
+- exact RSI style/fill options
+- exact Volume scale UX
+
+## Validation checklist after deploy
+
+1. Add Volume
+2. Open Volume settings
+3. Enable Volume MA
+4. Try SMA 20
+5. Try SMA 500
+6. Add RSI also
+7. Confirm Volume and RSI appear in separate panels
+8. Remove RSI
+9. Confirm Volume panel stays clean
+10. Add MA overlay and VWAP, confirm they stay on price chart
 
 ## Syntax check
 
 JavaScript syntax check: PASS
 
 
+
+## Health check
+
+Backend version patched: True
 
 ## Deploy
 
@@ -103,4 +96,4 @@ Then hard refresh:
 - Mac: Cmd + Shift + R
 - Windows: Ctrl + F5
 
-Check `/health`; it must show version `3.4.0`.
+Check `/health`; it must show version `3.6.0`.

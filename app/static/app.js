@@ -1,4 +1,4 @@
-console.log("WhaleX Chart Platform JS v3.4.0 loaded");
+console.log("WhaleX Chart Platform JS v3.6.0 loaded");
 
 const HARD = { bucket: 100, minM: 5, maxLines: 10, publishMs: 750 };
 
@@ -163,6 +163,40 @@ indicatorLegend.id = "indicatorLegend";
 indicatorLegend.className = "indicator-legend";
 shellEl.appendChild(indicatorLegend);
 
+const indicatorPanelStack = document.createElement("div");
+indicatorPanelStack.id = "indicatorPanelStack";
+indicatorPanelStack.className = "indicator-panel-stack hidden";
+indicatorPanelStack.innerHTML = `
+  <div id="volumeSubPanel" class="indicator-subpanel hidden">
+    <div class="indicator-panel-title" id="volumePanelTitle">Volume</div>
+    <div class="indicator-panel-value" id="volumePanelValue"></div>
+    <canvas id="volumePanelCanvas"></canvas>
+    <div id="volumePanelHint" class="indicator-panel-hint"></div>
+  </div>
+  <div id="rsiSubPanel" class="indicator-subpanel hidden">
+    <div class="indicator-panel-title" id="rsiPanelTitle2">RSI 14</div>
+    <div class="indicator-panel-value" id="rsiPanelValue"></div>
+    <canvas id="rsiPanelCanvas2"></canvas>
+    <div id="rsiPanelHint" class="indicator-panel-hint"></div>
+  </div>
+`;
+shellEl.appendChild(indicatorPanelStack);
+
+const volumeSubPanel = document.getElementById("volumeSubPanel");
+const volumePanelCanvas = document.getElementById("volumePanelCanvas");
+const volumePanelCtx = volumePanelCanvas.getContext("2d");
+const volumePanelTitle = document.getElementById("volumePanelTitle");
+const volumePanelValue = document.getElementById("volumePanelValue");
+const volumePanelHint = document.getElementById("volumePanelHint");
+
+const rsiSubPanel = document.getElementById("rsiSubPanel");
+const rsiPanelCanvas2 = document.getElementById("rsiPanelCanvas2");
+const rsiPanelCtx2 = rsiPanelCanvas2.getContext("2d");
+const rsiPanelTitle2 = document.getElementById("rsiPanelTitle2");
+const rsiPanelValue = document.getElementById("rsiPanelValue");
+const rsiPanelHint = document.getElementById("rsiPanelHint");
+
+
 
 const chart = LightweightCharts.createChart(chartEl, {
   layout: {
@@ -263,7 +297,7 @@ function toast(m) {
 
 function safeResize() {
   resizeChart();
-  setTimeout(drawRSI, 50);
+  setTimeout(drawIndicatorPanels, 50);
   requestAnimationFrame(() => { resizeChart(); drawOverlay(); });
   setTimeout(() => { resizeChart(); drawOverlay(); }, 80);
   setTimeout(() => { resizeChart(); drawOverlay(); }, 260);
@@ -1876,11 +1910,11 @@ let activeIndicatorSettingsTab = "inputs";
 let indicatorSettingsDraft = null;
 
 function indicatorSettingsKey() {
-  return "whalex_indicator_settings_v340";
+  return "whalex_indicator_settings_v360";
 }
 
 function indicatorFavoritesKey() {
-  return "whalex_indicator_favorites_v340";
+  return "whalex_indicator_favorites_v360";
 }
 
 function defaultIndicatorSettings() {
@@ -1913,6 +1947,7 @@ function defaultIndicatorSettings() {
       showMA:false,
       maType:"SMA",
       maLength:20,
+      maPartial:true,
       maColor:"#f59e0b",
       maWidth:2
     },
@@ -1978,7 +2013,8 @@ function normalizeIndicatorSettings(s) {
       ...volume,
       maLength: Math.max(1, Number(volume.maLength || 20)),
       maWidth: Math.max(1, Number(volume.maWidth || 2)),
-      opacity: Math.max(5, Math.min(100, Number(volume.opacity || 28)))
+      opacity: Math.max(5, Math.min(100, Number(volume.opacity || 28))),
+      maPartial: volume.maPartial !== false
     },
     rsi: {
       ...d.rsi,
@@ -2273,7 +2309,8 @@ function renderIndicatorSettingsBody() {
       html += settingSubtitle("Volume Moving Average");
       html += settingRow("Show Volume MA", `<input data-field="showMA" type="checkbox" ${cfg.showMA ? "checked" : ""}>`);
       html += settingRow("MA type", maTypeSelect(cfg.maType || "SMA", true));
-      html += settingRow("MA length", `<input data-field="maLength" type="number" min="1" max="1000" value="${cfg.maLength || 20}">`);
+      html += settingRow("MA length", `<input data-field="maLength" type="number" min="1" max="1000" value="${cfg.maLength || 20}">`, "Large values need enough history");
+      html += settingRow("Show partial MA", `<input data-field="maPartial" type="checkbox" ${cfg.maPartial !== false ? "checked" : ""}>`, "Keeps MA visible until full warmup is available");
     }
     if (tab === "style") {
       html += settingSubtitle("Columns");
@@ -2427,6 +2464,7 @@ function normalizeOneIndicator(kind, cfg) {
     showMA:!!cfg.showMA,
     maType:cfg.maType || "SMA",
     maLength:Math.max(1,Number(cfg.maLength || 20)),
+    maPartial:cfg.maPartial !== false,
     maColor:cfg.maColor || "#f59e0b",
     maWidth:Math.max(1,Number(cfg.maWidth || 2))
   };
@@ -2454,59 +2492,71 @@ function applyOffset(data, offset=0) {
   });
 }
 
-function maOverValues(values, period, type="EMA", volumes=null) {
+function maOverValues(values, period, type="EMA", volumes=null, allowPartial=false) {
   period = Math.max(1, Number(period || 9));
   if (!values.length) return [];
+
+  const startOk = i => allowPartial || i >= period - 1;
+  const lenAt = i => allowPartial ? Math.min(period, i + 1) : period;
+
   if (type === "SMA") {
     const out = [];
     let sum = 0;
     values.forEach((v,i) => {
       sum += v.value;
       if (i >= period) sum -= values[i-period].value;
-      if (i >= period-1) out.push({ time:v.time, value:sum/period });
+      if (startOk(i)) out.push({ time:v.time, value:sum/lenAt(i) });
     });
     return out;
   }
+
   if (type === "WMA") {
     const out = [];
-    const denom = period*(period+1)/2;
-    for (let i=period-1; i<values.length; i++) {
-      let weighted=0;
-      for (let j=0;j<period;j++) weighted += values[i-j].value*(period-j);
+    for (let i=0; i<values.length; i++) {
+      if (!startOk(i)) continue;
+      const len = lenAt(i);
+      const denom = len * (len + 1) / 2;
+      let weighted = 0;
+      for (let j=0; j<len; j++) weighted += values[i-j].value * (len-j);
       out.push({ time:values[i].time, value:weighted/denom });
     }
     return out;
   }
+
   if (type === "SMMA/RMA") {
     const out = [];
     let rma = values[0].value;
-    const alpha = 1/period;
-    values.forEach(v => {
-      rma = alpha*v.value + (1-alpha)*rma;
-      out.push({ time:v.time, value:rma });
+    values.forEach((v,i) => {
+      const len = lenAt(i);
+      const alpha = 1 / len;
+      rma = alpha * v.value + (1-alpha) * rma;
+      if (startOk(i)) out.push({ time:v.time, value:rma });
     });
     return out;
   }
+
   if (type === "VWMA") {
     const out = [];
-    let pv=0, vol=0;
+    let pv = 0, vol = 0;
     values.forEach((v,i) => {
       const vv = volumes?.[i] ?? rawCandles[i]?.volume ?? 1;
-      pv += v.value*vv;
+      pv += v.value * vv;
       vol += vv;
       if (i >= period) {
         const oldV = volumes?.[i-period] ?? rawCandles[i-period]?.volume ?? 1;
-        pv -= values[i-period].value*oldV;
+        pv -= values[i-period].value * oldV;
         vol -= oldV;
       }
-      if (i >= period-1) out.push({ time:v.time, value:vol ? pv/vol : v.value });
+      if (startOk(i)) out.push({ time:v.time, value:vol ? pv/vol : v.value });
     });
     return out;
   }
-  const k = 2/(period+1);
+
+  // EMA: TradingView-like EMA starts from first available value. This keeps EMA visible.
+  const k = 2 / (period + 1);
   let ema = values[0].value;
   return values.map(v => {
-    ema = v.value*k + ema*(1-k);
+    ema = v.value * k + ema * (1-k);
     return { time:v.time, value:ema };
   });
 }
@@ -2518,7 +2568,7 @@ function maData(data, cfg) {
 
 function volumeMAData(data, cfg) {
   const vals = data.map(c => ({ time:c.time, value:c.volume || 0 }));
-  return maOverValues(vals, cfg.maLength, cfg.maType, data.map(c => c.volume || 0));
+  return maOverValues(vals, cfg.maLength, cfg.maType, data.map(c => c.volume || 0), cfg.maPartial !== false);
 }
 
 function periodKey(time, anchor) {
@@ -2609,58 +2659,161 @@ function redrawIndicators() {
     });
   }
 
-  if (indicatorSettings.volume.enabled && indicatorSettings.volume.visible !== false) {
-    try {
-      const alpha = Math.max(5,Math.min(100,Number(indicatorSettings.volume.opacity || 28))) / 100;
-      const hexToRgb = hex => {
-        const n = parseInt((hex || "#64748b").replace("#",""),16);
-        return [(n>>16)&255,(n>>8)&255,n&255];
-      };
-      const rgba = (hex,a) => {
-        const [r,g,b]=hexToRgb(hex);
-        return `rgba(${r},${g},${b},${a})`;
-      };
-      volumeSeries = chart.addHistogramSeries({
-        priceFormat:{type:"volume"},
-        priceScaleId:"volume",
-        priceLineVisible:false,
-        lastValueVisible:false
-      });
-      chart.priceScale("volume").applyOptions({ visible:false, scaleMargins:{ top:0.82, bottom:0 } });
-      volumeSeries.setData(rawCandles.map(c => ({
-        time:c.time,
-        value:c.volume || 0,
-        color:c.close >= c.open ? rgba(indicatorSettings.volume.upColor, alpha) : rgba(indicatorSettings.volume.downColor, alpha)
-      })));
-      if (indicatorSettings.volume.showMA) {
-        addLineIndicator("volumeMA", volumeMAData(rawCandles, indicatorSettings.volume), indicatorSettings.volume.maColor, indicatorSettings.volume.maWidth, "volume");
-      }
-    } catch(e) {}
-  }
+  // Volume is drawn in its own bottom panel now. This prevents it from damaging
+  // the main price scale and keeps Volume MA visible even with multiple indicators.
+  drawVolumePanel();
 
   drawRSI();
   if (orderflowTag) orderflowTag.classList.toggle("hidden", !indicatorSettings.orderflowFoundation);
   updateIndicatorLegend();
 }
 
-function drawRSI() {
-  rsiPanel.classList.toggle("hidden", !(indicatorSettings.rsi.enabled && indicatorSettings.rsi.visible !== false));
-  if (!(indicatorSettings.rsi.enabled && indicatorSettings.rsi.visible !== false) || !rawCandles.length) return;
+function visiblePanelCandles(maxFallback=220) {
+  if (!rawCandles.length) return [];
+  let range = null;
+  try { range = chart.timeScale().getVisibleRange(); } catch(e) {}
+  let rows = rawCandles;
+  if (range && range.from && range.to) {
+    const from = Number(range.from);
+    const to = Number(range.to);
+    rows = rawCandles.filter(c => c.time >= from && c.time <= to);
+  }
+  if (!rows.length) rows = rawCandles.slice(-maxFallback);
+  return rows.slice(-Math.max(80, maxFallback));
+}
 
-  const rect = rsiPanel.getBoundingClientRect();
+function resizePanelCanvas(canvas, ctx) {
+  const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  rsiCanvas.width=Math.floor(rect.width*dpr);
-  rsiCanvas.height=Math.floor(rect.height*dpr);
-  rsiCanvas.style.width=rect.width+"px";
-  rsiCanvas.style.height=rect.height+"px";
-  rsiCtx.setTransform(dpr,0,0,dpr,0,0);
-  rsiCtx.clearRect(0,0,rect.width,rect.height);
+  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  canvas.style.width = rect.width + "px";
+  canvas.style.height = rect.height + "px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,rect.width,rect.height);
+  return rect;
+}
 
+function updatePanelLayout() {
+  const showVol = indicatorSettings.volume.enabled && indicatorSettings.volume.visible !== false;
+  const showRsi = indicatorSettings.rsi.enabled && indicatorSettings.rsi.visible !== false;
+  indicatorPanelStack.classList.toggle("hidden", !(showVol || showRsi));
+  volumeSubPanel.classList.toggle("hidden", !showVol);
+  rsiSubPanel.classList.toggle("hidden", !showRsi);
+
+  const count = (showVol ? 1 : 0) + (showRsi ? 1 : 0);
+  const chartH = Math.max(360, shellEl.clientHeight || 600);
+  const panelH = count >= 2 ? Math.max(86, Math.min(126, Math.floor(chartH * 0.16))) : Math.max(104, Math.min(150, Math.floor(chartH * 0.22)));
+  [volumeSubPanel, rsiSubPanel].forEach(p => { if (p) p.style.height = panelH + "px"; });
+
+  let bottom = 0.08;
+  if (count === 1) bottom = Math.min(0.30, (panelH + 30) / chartH);
+  if (count >= 2) bottom = Math.min(0.46, ((panelH * 2) + 42) / chartH);
+
+  try {
+    chart.priceScale("right").applyOptions({
+      scaleMargins: { top: 0.08, bottom }
+    });
+  } catch(e) {}
+}
+
+function drawVolumePanel() {
+  updatePanelLayout();
+  const showVol = indicatorSettings.volume.enabled && indicatorSettings.volume.visible !== false;
+  if (!showVol) return;
+
+  const rect = resizePanelCanvas(volumePanelCanvas, volumePanelCtx);
+  const rows = visiblePanelCandles(320);
+  if (!rows.length) return;
+
+  const padL=42, padR=12, padT=24, padB=16;
+  const w=rect.width-padL-padR;
+  const h=rect.height-padT-padB;
+
+  const maAll = indicatorSettings.volume.showMA ? volumeMAData(rawCandles, indicatorSettings.volume) : [];
+  const visibleTime = new Set(rows.map(c => String(c.time)));
+  let ma = maAll.filter(p => visibleTime.has(String(p.time)));
+  if (!ma.length && maAll.length) ma = maAll.slice(-rows.length);
+
+  const maxV = Math.max(1, ...rows.map(c => c.volume || 0), ...ma.map(p => p.value || 0));
+  const alpha = Math.max(5,Math.min(100,Number(indicatorSettings.volume.opacity || 28))) / 100;
+
+  const hexToRgb = hex => {
+    const n = parseInt((hex || "#64748b").replace("#",""),16);
+    return [(n>>16)&255,(n>>8)&255,n&255];
+  };
+  const rgba = (hex,a) => {
+    const [r,g,b]=hexToRgb(hex);
+    return `rgba(${r},${g},${b},${a})`;
+  };
+  const xFor = i => padL + (i/Math.max(1,rows.length-1))*w;
+  const yForVol = v => padT + h - (Math.max(0,v)/maxV)*h;
+  const barW = Math.max(2, Math.min(12, w/Math.max(1,rows.length) * 0.72));
+
+  volumePanelCtx.strokeStyle = "rgba(148,163,184,.18)";
+  volumePanelCtx.lineWidth = 1;
+  [0.25,0.5,0.75].forEach(fr => {
+    const y = padT + h*fr;
+    volumePanelCtx.beginPath(); volumePanelCtx.moveTo(padL,y); volumePanelCtx.lineTo(rect.width-padR,y); volumePanelCtx.stroke();
+  });
+
+  rows.forEach((c,i) => {
+    const x = xFor(i);
+    const y = yForVol(c.volume || 0);
+    const bh = padT + h - y;
+    volumePanelCtx.fillStyle = c.close >= c.open ? rgba(indicatorSettings.volume.upColor, alpha) : rgba(indicatorSettings.volume.downColor, alpha);
+    volumePanelCtx.fillRect(x-barW/2, y, barW, bh);
+  });
+
+  let hint = "";
+  if (indicatorSettings.volume.showMA) {
+    if (ma.length) {
+      volumePanelCtx.strokeStyle = indicatorSettings.volume.maColor || "#f59e0b";
+      volumePanelCtx.lineWidth = Math.max(1, Number(indicatorSettings.volume.maWidth || 2));
+      volumePanelCtx.beginPath();
+      ma.forEach((p,i) => {
+        const idx = rows.findIndex(c => c.time === p.time);
+        const x = idx >= 0 ? xFor(idx) : xFor(Math.max(0, rows.length - ma.length + i));
+        const y = yForVol(p.value || 0);
+        if (i===0) volumePanelCtx.moveTo(x,y); else volumePanelCtx.lineTo(x,y);
+      });
+      volumePanelCtx.stroke();
+
+      if ((rawCandles.length < Number(indicatorSettings.volume.maLength || 20)) && indicatorSettings.volume.maPartial !== false) {
+        hint = `Partial ${indicatorSettings.volume.maType} ${indicatorSettings.volume.maLength}: only ${rawCandles.length} candles loaded`;
+      }
+    } else {
+      hint = `${indicatorSettings.volume.maType} ${indicatorSettings.volume.maLength} needs more candles`;
+    }
+  }
+
+  const latest = rows[rows.length-1];
+  volumePanelTitle.textContent = indicatorDisplayName("volume");
+  volumePanelValue.textContent = latest?.volume ? `Vol ${Number(latest.volume).toLocaleString()}` : "";
+  if (volumePanelHint) volumePanelHint.textContent = hint;
+}
+
+function drawRSI() {
+  updatePanelLayout();
+  const showRsi = indicatorSettings.rsi.enabled && indicatorSettings.rsi.visible !== false;
+  if (!showRsi || !rawCandles.length) {
+    if (rsiPanelHint) rsiPanelHint.textContent = "";
+    return;
+  }
+
+  const rect = resizePanelCanvas(rsiPanelCanvas2, rsiPanelCtx2);
+  const rows = visiblePanelCandles(260);
   const period = Math.max(1,Number(indicatorSettings.rsi.length || 14));
-  const data = rsiData(rawCandles,period).slice(-180);
-  if (!data.length) return;
+  const all = rsiData(rawCandles,period);
+  const timeSet = new Set(rows.map(c => String(c.time)));
+  let data = all.filter(p => timeSet.has(String(p.time)));
+  if (!data.length) data = all.slice(-Math.max(120, rows.length));
+  if (!data.length) {
+    if (rsiPanelHint) rsiPanelHint.textContent = `RSI ${period} needs more candles`;
+    return;
+  }
 
-  const padL=36,padR=10,padT=16,padB=14;
+  const padL=36,padR=12,padT=24,padB=14;
   const w=rect.width-padL-padR,h=rect.height-padT-padB;
   const yFor=v => padT+(100-v)/100*h;
   const xFor=i => padL+(i/Math.max(1,data.length-1))*w;
@@ -2672,21 +2825,21 @@ function drawRSI() {
   ];
   levelRows.forEach(([v,c]) => {
     const y=yFor(Number(v));
-    rsiCtx.strokeStyle=c || "rgba(148,163,184,.35)";
-    rsiCtx.lineWidth=1;
-    rsiCtx.beginPath(); rsiCtx.moveTo(padL,y); rsiCtx.lineTo(rect.width-padR,y); rsiCtx.stroke();
-    rsiCtx.fillStyle="#94a3b8"; rsiCtx.font="11px Inter, Arial"; rsiCtx.fillText(String(v),8,y+3);
+    rsiPanelCtx2.strokeStyle=c || "rgba(148,163,184,.35)";
+    rsiPanelCtx2.lineWidth=1;
+    rsiPanelCtx2.beginPath(); rsiPanelCtx2.moveTo(padL,y); rsiPanelCtx2.lineTo(rect.width-padR,y); rsiPanelCtx2.stroke();
+    rsiPanelCtx2.fillStyle="#94a3b8"; rsiPanelCtx2.font="11px Inter, Arial"; rsiPanelCtx2.fillText(String(v),8,y+3);
   });
 
-  const drawLine = (arr,color,width=2) => {
-    rsiCtx.strokeStyle=color;
-    rsiCtx.lineWidth=width;
-    rsiCtx.beginPath();
+  const drawLine = (arr,color,width=2, indexOffset=0) => {
+    rsiPanelCtx2.strokeStyle=color;
+    rsiPanelCtx2.lineWidth=width;
+    rsiPanelCtx2.beginPath();
     arr.forEach((p,i) => {
-      const x=xFor(i), y=yFor(p.value);
-      if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
+      const x=xFor(i + indexOffset), y=yFor(p.value);
+      if (i===0) rsiPanelCtx2.moveTo(x,y); else rsiPanelCtx2.lineTo(x,y);
     });
-    rsiCtx.stroke();
+    rsiPanelCtx2.stroke();
   };
 
   drawLine(data, indicatorSettings.rsi.color || "#d6a93d", 2);
@@ -2694,15 +2847,7 @@ function drawRSI() {
   if (indicatorSettings.rsi.showMA) {
     const smoothed = maOverValues(data, indicatorSettings.rsi.maLength, indicatorSettings.rsi.maType, data.map(x => x.volume || 0));
     const offset = data.length - smoothed.length;
-    const mapped = smoothed.map((x,i) => ({ ...x, value:x.value, _idx:i+offset }));
-    rsiCtx.strokeStyle = indicatorSettings.rsi.maColor || "#a78bfa";
-    rsiCtx.lineWidth = 2;
-    rsiCtx.beginPath();
-    mapped.forEach((p,i) => {
-      const x = xFor(p._idx), y = yFor(p.value);
-      if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
-    });
-    rsiCtx.stroke();
+    if (smoothed.length) drawLine(smoothed, indicatorSettings.rsi.maColor || "#a78bfa", 2, offset);
 
     if (indicatorSettings.rsi.showBB && smoothed.length) {
       const len = Math.max(1,Number(indicatorSettings.rsi.maLength || 14));
@@ -2715,18 +2860,29 @@ function drawRSI() {
       }
       const mult = Number(indicatorSettings.rsi.bbStdDev || 2);
       ["upper","lower"].forEach(side => {
-        rsiCtx.strokeStyle = "rgba(167,139,250,.65)";
-        rsiCtx.lineWidth = 1;
-        rsiCtx.beginPath();
+        rsiPanelCtx2.strokeStyle = "rgba(167,139,250,.65)";
+        rsiPanelCtx2.lineWidth = 1;
+        rsiPanelCtx2.beginPath();
         stdevRows.forEach((p,i) => {
           const val = side === "upper" ? p.mean + p.sd*mult : p.mean - p.sd*mult;
           const x = xFor(p.idx), y = yFor(val);
-          if (i===0) rsiCtx.moveTo(x,y); else rsiCtx.lineTo(x,y);
+          if (i===0) rsiPanelCtx2.moveTo(x,y); else rsiPanelCtx2.lineTo(x,y);
         });
-        rsiCtx.stroke();
+        rsiPanelCtx2.stroke();
       });
     }
   }
+
+  const last = data[data.length-1];
+  rsiPanelTitle2.textContent = indicatorDisplayName("rsi");
+  rsiPanelValue.textContent = last ? `RSI ${Number(last.value).toFixed(2)}` : "";
+  if (rsiPanelHint) rsiPanelHint.textContent = rawCandles.length < period + 2 ? `Needs at least ${period + 2} candles` : "";
+}
+
+function drawIndicatorPanels() {
+  updatePanelLayout();
+  drawVolumePanel();
+  drawRSI();
 }
 
 /* ---------- Data connection ---------- */

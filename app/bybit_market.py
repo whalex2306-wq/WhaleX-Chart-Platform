@@ -25,7 +25,7 @@ class BybitMarketStream:
         self.best_ask: Optional[float] = None
         self.history_source = "loading"
 
-    async def fetch_initial_candles(self, limit=500):
+    async def fetch_initial_candles(self, limit=1000):
         return await fetch_candles_with_fallback(self.symbol, self.interval, limit)
 
     def apply_orderbook(self, msg: dict):

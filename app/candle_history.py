@@ -16,7 +16,7 @@ def symbol_to_okx_swap(symbol: str) -> str:
         return s
     return "BTC-USDT-SWAP"
 
-async def fetch_bybit_candles(symbol: str, interval: str, limit: int = 500) -> Tuple[List[dict], str]:
+async def fetch_bybit_candles(symbol: str, interval: str, limit: int = 1000) -> Tuple[List[dict], str]:
     params = {"category":"linear","symbol":symbol.upper().strip(),"interval":BYBIT_INTERVALS.get(str(interval),"1"),"limit":str(limit)}
     async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent":"WhaleX/2.2"}) as client:
         r = await client.get(f"{BYBIT_REST}/v5/market/kline", params=params)
@@ -31,7 +31,7 @@ async def fetch_bybit_candles(symbol: str, interval: str, limit: int = 500) -> T
     candles.sort(key=lambda x: x["time"])
     return candles, "Bybit REST"
 
-async def fetch_okx_candles(symbol: str, interval: str, limit: int = 500) -> Tuple[List[dict], str]:
+async def fetch_okx_candles(symbol: str, interval: str, limit: int = 1000) -> Tuple[List[dict], str]:
     inst_id = symbol_to_okx_swap(symbol)
     params = {"instId": inst_id, "bar": OKX_INTERVALS.get(str(interval), "1m"), "limit": str(min(max(limit, 1), 300))}
     async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent":"WhaleX/2.2"}) as client:
@@ -47,7 +47,7 @@ async def fetch_okx_candles(symbol: str, interval: str, limit: int = 500) -> Tup
     candles.sort(key=lambda x: x["time"])
     return candles, f"OKX fallback candles ({inst_id})"
 
-async def fetch_candles_with_fallback(symbol: str, interval: str, limit: int = 500):
+async def fetch_candles_with_fallback(symbol: str, interval: str, limit: int = 1000):
     errors = []
     try:
         candles, source = await fetch_bybit_candles(symbol, interval, limit)
