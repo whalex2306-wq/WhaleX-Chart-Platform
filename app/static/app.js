@@ -62,6 +62,10 @@ const els = {
   selClone: document.getElementById("selClone"),
   selMoveMode: document.getElementById("selMoveMode"),
   selSettings: document.getElementById("selSettings"),
+  toolbarDragHandle: document.getElementById("toolbarDragHandle"),
+  selTemplate: document.getElementById("selTemplate"),
+  selStyle: document.getElementById("selStyle"),
+  selLineWidth: document.getElementById("selLineWidth"),
   drawingSettingsModal: document.getElementById("drawingSettingsModal"),
   closeDrawingSettings: document.getElementById("closeDrawingSettings"),
   drawingSettingsTitle: document.getElementById("drawingSettingsTitle"),
@@ -77,6 +81,37 @@ const els = {
   deleteTemplateBtn: document.getElementById("deleteTemplateBtn"),
   templateNote: document.getElementById("templateNote")
 };
+
+
+const toolbarStylePopover = document.createElement("div");
+toolbarStylePopover.id = "toolbarStylePopover";
+toolbarStylePopover.className = "toolbar-popover hidden";
+toolbarStylePopover.innerHTML = `
+  <h4>Style</h4>
+  <div class="row"><span>Color</span><input id="quickColor" type="color" /></div>
+  <div class="row"><span>Width</span><input id="quickWidth" type="number" min="1" max="8" /></div>
+  <div class="row"><span>Style</span><select id="quickLineStyle"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></div>
+  <div class="row"><span>Labels</span><input id="quickLabels" type="checkbox" /></div>
+  <button id="quickOpenSettings">More settings</button>
+`;
+document.body.appendChild(toolbarStylePopover);
+
+const toolbarTemplatePopover = document.createElement("div");
+toolbarTemplatePopover.id = "toolbarTemplatePopover";
+toolbarTemplatePopover.className = "toolbar-popover hidden";
+toolbarTemplatePopover.innerHTML = `
+  <h4>Templates</h4>
+  <div class="row"><span>Name</span><input id="quickTemplateName" type="text" placeholder="Template name" /></div>
+  <div class="row"><span>Saved</span><select id="quickTemplateSelect"></select></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+    <button id="quickSaveTemplate">Save</button>
+    <button id="quickApplyTemplate">Apply</button>
+    <button id="quickDefaultTemplate">Default</button>
+    <button id="quickDeleteTemplate" style="background:#ef4444">Delete</button>
+  </div>
+`;
+document.body.appendChild(toolbarTemplatePopover);
+
 
 const chartEl = document.getElementById("chart");
 const shellEl = document.getElementById("chartShell");
@@ -601,6 +636,157 @@ function selectedDrawing() {
   return drawings.find(x => x.id === selectedId);
 }
 
+
+let toolbarPinned = false;
+let toolbarDrag = null;
+
+function toolbarPositionKey() {
+  return `whalex_toolbar_pos_v218_${(els.symbol.value || "BTCUSDT").trim().toUpperCase()}`;
+}
+
+function saveToolbarPosition() {
+  if (!els.selectionToolbar) return;
+  localStorage.setItem(toolbarPositionKey(), JSON.stringify({
+    left: parseFloat(els.selectionToolbar.style.left || "64"),
+    top: parseFloat(els.selectionToolbar.style.top || "12")
+  }));
+}
+
+function loadToolbarPosition() {
+  try { return JSON.parse(localStorage.getItem(toolbarPositionKey()) || "null"); }
+  catch (e) { return null; }
+}
+
+function placeToolbar(x,y) {
+  if (!els.selectionToolbar) return;
+  const maxX = Math.max(10, (canvas.clientWidth || window.innerWidth) - 460);
+  const maxY = Math.max(10, (canvas.clientHeight || window.innerHeight) - 70);
+  els.selectionToolbar.style.left = `${Math.max(10, Math.min(maxX, x))}px`;
+  els.selectionToolbar.style.top = `${Math.max(10, Math.min(maxY, y))}px`;
+}
+
+function hideToolbarPopovers() {
+  toolbarStylePopover.classList.add("hidden");
+  toolbarTemplatePopover.classList.add("hidden");
+}
+
+function positionPopover(pop, anchorBtn) {
+  const chartRect = shellEl.getBoundingClientRect();
+  const btnRect = anchorBtn.getBoundingClientRect();
+  pop.style.left = `${Math.min(window.innerWidth - 250, btnRect.left)}px`;
+  pop.style.top = `${Math.min(window.innerHeight - 220, btnRect.bottom + 8)}px`;
+}
+
+function refreshToolbarTemplateSelect() {
+  const d = selectedDrawing();
+  const sel = document.getElementById("quickTemplateSelect");
+  if (!d || !sel) return;
+  const templates = loadTemplates(d.type);
+  const def = getDefaultTemplateName(d.type);
+  const names = Object.keys(templates).sort();
+  sel.innerHTML = `<option value="">${names.length ? "Select template" : "No templates"}</option>`;
+  names.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name === def ? `${name} ★ Default` : name;
+    sel.appendChild(opt);
+  });
+}
+
+function openToolbarTemplates() {
+  const d = selectedDrawing();
+  if (!d) { toast("Select a drawing first"); return; }
+  hideToolbarPopovers();
+  refreshToolbarTemplateSelect();
+  document.getElementById("quickTemplateName").value = "";
+  toolbarTemplatePopover.classList.remove("hidden");
+  positionPopover(toolbarTemplatePopover, els.selTemplate);
+}
+
+function openToolbarStyle() {
+  const d = selectedDrawing();
+  if (!d) { toast("Select a drawing first"); return; }
+  normalizeDrawing(d);
+  hideToolbarPopovers();
+  document.getElementById("quickColor").value = d.settings.color || "#38bdf8";
+  document.getElementById("quickWidth").value = d.settings.width || 2;
+  document.getElementById("quickLineStyle").value = d.settings.lineStyle || "solid";
+  document.getElementById("quickLabels").checked = d.settings.showLabels !== false;
+  toolbarStylePopover.classList.remove("hidden");
+  positionPopover(toolbarStylePopover, els.selStyle);
+}
+
+function applyQuickStyle() {
+  const d = selectedDrawing();
+  if (!d) return;
+  normalizeDrawing(d);
+  d.settings.color = document.getElementById("quickColor").value;
+  d.settings.width = Number(document.getElementById("quickWidth").value || 2);
+  d.settings.lineStyle = document.getElementById("quickLineStyle").value;
+  d.settings.showLabels = document.getElementById("quickLabels").checked;
+  if (d.type === "fib") {
+    d.settings.levels = (d.settings.levels || []).map(l => ({...l, color: l.color || d.settings.color}));
+  }
+  if (d.type === "rect") {
+    d.settings.borderColor = d.settings.color;
+  }
+  saveDrawings();
+  drawOverlay();
+}
+
+function saveTemplateFromToolbar() {
+  const d = selectedDrawing();
+  if (!d) return;
+  normalizeDrawing(d);
+  const name = (document.getElementById("quickTemplateName").value || "").trim();
+  if (!name) { toast("Enter template name"); return; }
+  const templates = loadTemplates(d.type);
+  templates[name] = cloneSettings(d.settings);
+  saveTemplates(d.type, templates);
+  refreshToolbarTemplateSelect();
+  document.getElementById("quickTemplateSelect").value = name;
+  toast(`${d.type.toUpperCase()} template saved`);
+}
+
+function applyTemplateFromToolbar() {
+  const d = selectedDrawing();
+  if (!d) return;
+  const name = document.getElementById("quickTemplateSelect").value;
+  if (!name) { toast("Select template"); return; }
+  const templates = loadTemplates(d.type);
+  if (!templates[name]) { toast("Template not found"); return; }
+  d.settings = { ...defaultStyle(d.type), ...cloneSettings(templates[name]) };
+  if (d.type === "fib" && templates[name].levels) d.settings.levels = cloneSettings(templates[name].levels);
+  normalizeDrawing(d);
+  saveDrawings();
+  drawOverlay();
+  toast(`${name} applied`);
+}
+
+function setDefaultTemplateFromToolbar() {
+  const d = selectedDrawing();
+  if (!d) return;
+  const name = document.getElementById("quickTemplateSelect").value;
+  if (!name) { toast("Select template"); return; }
+  setDefaultTemplateName(d.type, name);
+  refreshToolbarTemplateSelect();
+  toast(`${name} set default for ${d.type.toUpperCase()}`);
+}
+
+function deleteTemplateFromToolbar() {
+  const d = selectedDrawing();
+  if (!d) return;
+  const name = document.getElementById("quickTemplateSelect").value;
+  if (!name) { toast("Select template"); return; }
+  const templates = loadTemplates(d.type);
+  delete templates[name];
+  saveTemplates(d.type, templates);
+  if (getDefaultTemplateName(d.type) === name) setDefaultTemplateName(d.type, "");
+  refreshToolbarTemplateSelect();
+  toast(`${name} deleted`);
+}
+
+
 function drawingScreenBounds(d) {
   if (!d || !Array.isArray(d.points) || !d.points.length) return null;
   const pts = d.points.map(pointToXY).filter(p => p.x != null && p.y != null);
@@ -626,17 +812,25 @@ function updateSelectionToolbar() {
   const d = selectedDrawing();
   els.selectionToolbar.classList.toggle("hidden", !d);
   if (d) {
-    if (els.selLock) els.selLock.textContent = d.locked ? "Unlock" : "Lock";
-    if (els.selHide) els.selHide.textContent = d.hidden ? "Show" : "Hide";
+    if (els.selLock) els.selLock.textContent = d.locked ? "🔓" : "🔒";
+    if (els.selHide) els.selHide.textContent = d.hidden ? "🙈" : "👁";
+    if (els.selLineWidth) els.selLineWidth.textContent = `${d.settings?.width || 1}px`;
+
+    if (toolbarPinned) return;
+
+    const saved = loadToolbarPosition();
+    if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+      placeToolbar(saved.left, saved.top);
+      toolbarPinned = true;
+      return;
+    }
 
     const b = drawingScreenBounds(d);
     if (b) {
-      const chartW = canvas.clientWidth || 800;
-      const x = Math.max(10, Math.min(chartW - 330, b.left + 8));
-      const y = Math.max(10, b.top - 42);
-      els.selectionToolbar.style.left = `${x}px`;
-      els.selectionToolbar.style.top = `${y}px`;
+      placeToolbar(b.left + 8, Math.max(10, b.top - 44));
     }
+  } else {
+    hideToolbarPopovers();
   }
 }
 
@@ -1281,6 +1475,7 @@ function bindLiveSettingsEvents() {
 }
 
 function openDrawingSettings() {
+  hideToolbarPopovers();
   const d = selectedDrawing();
   if (!d) { toast("Select a drawing first"); return; }
   normalizeDrawing(d);
@@ -1415,6 +1610,7 @@ function connect() {
   rawCandles = [];
   candlesByTime = new Map();
   lastAlertKeys = new Set();
+  toolbarPinned = false;
   els.status.textContent = "Connecting";
   els.statusDot.style.background = "#f59e0b";
   els.title.textContent = `${(els.symbol.value || "BTCUSDT").trim().toUpperCase()} · Bybit Liquidity`;
@@ -1545,6 +1741,50 @@ if (els.selHide) els.selHide.onclick = () => toggleHide();
 if (els.selClone) els.selClone.onclick = () => cloneDrawing();
 if (els.selMoveMode) els.selMoveMode.onclick = () => setTool("cursor");
 if (els.selSettings) els.selSettings.onclick = () => openDrawingSettings();
+if (els.selTemplate) els.selTemplate.onclick = () => openToolbarTemplates();
+if (els.selStyle) els.selStyle.onclick = () => openToolbarStyle();
+if (els.selLineWidth) els.selLineWidth.onclick = () => openToolbarStyle();
+
+if (els.toolbarDragHandle) {
+  els.toolbarDragHandle.addEventListener("mousedown", e => {
+    toolbarPinned = true;
+    const r = els.selectionToolbar.getBoundingClientRect();
+    const shell = shellEl.getBoundingClientRect();
+    toolbarDrag = {
+      dx: e.clientX - r.left,
+      dy: e.clientY - r.top,
+      shellLeft: shell.left,
+      shellTop: shell.top
+    };
+    e.preventDefault();
+    e.stopPropagation();
+  });
+}
+
+document.addEventListener("mousemove", e => {
+  if (!toolbarDrag) return;
+  const x = e.clientX - toolbarDrag.shellLeft - toolbarDrag.dx;
+  const y = e.clientY - toolbarDrag.shellTop - toolbarDrag.dy;
+  placeToolbar(x, y);
+});
+
+document.addEventListener("mouseup", () => {
+  if (toolbarDrag) {
+    saveToolbarPosition();
+    toolbarDrag = null;
+  }
+});
+
+document.getElementById("quickColor")?.addEventListener("input", applyQuickStyle);
+document.getElementById("quickWidth")?.addEventListener("input", applyQuickStyle);
+document.getElementById("quickLineStyle")?.addEventListener("change", applyQuickStyle);
+document.getElementById("quickLabels")?.addEventListener("change", applyQuickStyle);
+document.getElementById("quickOpenSettings")?.addEventListener("click", () => openDrawingSettings());
+document.getElementById("quickSaveTemplate")?.addEventListener("click", saveTemplateFromToolbar);
+document.getElementById("quickApplyTemplate")?.addEventListener("click", applyTemplateFromToolbar);
+document.getElementById("quickDefaultTemplate")?.addEventListener("click", setDefaultTemplateFromToolbar);
+document.getElementById("quickDeleteTemplate")?.addEventListener("click", deleteTemplateFromToolbar);
+
 
 if (els.addFibLevel) els.addFibLevel.onclick = () => {
   const d = selectedDrawing();
@@ -1587,6 +1827,15 @@ document.querySelectorAll(".watch").forEach(b => {
     connect();
   };
 });
+
+
+document.addEventListener("mousedown", e => {
+  if (!toolbarStylePopover.classList.contains("hidden") || !toolbarTemplatePopover.classList.contains("hidden")) {
+    const inside = e.target.closest("#toolbarStylePopover,#toolbarTemplatePopover,#selectionToolbar");
+    if (!inside) hideToolbarPopovers();
+  }
+});
+
 
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
