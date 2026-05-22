@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>WhaleX Chart Platform v3.2</title>
+  <title>WhaleX Chart Platform v3.3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="/static/whalex-logo.png" />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -108,7 +108,7 @@
         <div class="title-row hidden" id="titleRow">
           <div>
             <h1 id="title">BTCUSDT · Bybit Liquidity</h1>
-            <p id="subtitle">WhaleX chart · indicator menu fixed</p>
+            <p id="subtitle">WhaleX chart · TV-style indicator manager</p>
           </div>
           <div class="source-pills">
             <span id="historySource">Candles: loading</span>
@@ -235,94 +235,45 @@
   </div>
 
   <div id="indicatorModal" class="modal hidden">
-    <div class="modal-card indicator-card">
+    <div class="modal-card tv-indicator-card">
       <div class="modal-head">
         <h2>Indicators</h2>
         <button id="closeIndicatorModal">×</button>
       </div>
 
-      <div class="indicator-tabs">
-        <button class="indicator-tab active" data-tab="ma">Moving Average</button>
-        <button class="indicator-tab" data-tab="vwap">VWAP</button>
-        <button class="indicator-tab" data-tab="momentum">Volume / RSI</button>
-        <button class="indicator-tab" data-tab="whalex">WhaleX</button>
+      <div class="tv-indicator-searchbar">
+        <input id="indicatorSearchInput" type="text" placeholder="Search indicators, metrics, strategies" autocomplete="off" />
       </div>
 
-      <div id="indicatorTabMA" class="indicator-tab-panel">
-        <div class="indicator-section">
-          <h3>Moving Average</h3>
-          <p class="indicator-help">Like TradingView, the user controls type, length, source, color and visibility. Default length is 9.</p>
-          <div id="maRows" class="indicator-rows"></div>
-          <button id="addMARowBtn" class="indicator-secondary-btn">+ Add Moving Average</button>
-        </div>
+      <div class="tv-indicator-tabs">
+        <button class="tv-indicator-tab active" data-library-tab="all">All</button>
+        <button class="tv-indicator-tab" data-library-tab="technical">Technicals</button>
+        <button class="tv-indicator-tab" data-library-tab="whalex">WhaleX</button>
+        <button class="tv-indicator-tab" data-library-tab="favorites">Favorites</button>
       </div>
 
-      <div id="indicatorTabVWAP" class="indicator-tab-panel hidden">
-        <div class="indicator-section">
-          <h3>VWAP</h3>
-          <div class="indicator-row two">
-            <label><input id="vwapToggle" type="checkbox"> Show VWAP</label>
-            <label>Source
-              <select id="vwapSource">
-                <option value="hlc3">HLC3</option>
-                <option value="close">Close</option>
-                <option value="ohlc4">OHLC4</option>
-              </select>
-            </label>
-          </div>
-          <div class="indicator-row three">
-            <label>Color <input id="vwapColor" type="color" value="#eab308"></label>
-            <label>Width <input id="vwapWidth" type="number" min="1" max="6" value="2"></label>
-            <label>Anchor
-              <select id="vwapAnchor">
-                <option value="session">Session / Day</option>
-              </select>
-            </label>
-          </div>
-        </div>
+      <div id="indicatorLibraryList" class="tv-indicator-list"></div>
+    </div>
+  </div>
+
+  <div id="indicatorSettingsModal" class="modal hidden">
+    <div class="modal-card tv-indicator-settings-card">
+      <div class="modal-head">
+        <h2 id="indicatorSettingsTitle">Indicator Settings</h2>
+        <button id="closeIndicatorSettingsModal">×</button>
       </div>
 
-      <div id="indicatorTabMomentum" class="indicator-tab-panel hidden">
-        <div class="indicator-section">
-          <h3>Volume</h3>
-          <label><input id="volumeToggle" type="checkbox"> Show Volume Histogram</label>
-        </div>
-
-        <div class="indicator-section">
-          <h3>RSI</h3>
-          <div class="indicator-row two">
-            <label><input id="rsiToggle" type="checkbox"> Show RSI Panel</label>
-            <label>Length <input id="rsiLength" type="number" min="1" max="200" value="14"></label>
-          </div>
-          <div class="indicator-row three">
-            <label>Upper <input id="rsiUpper" type="number" min="1" max="100" value="70"></label>
-            <label>Middle <input id="rsiMiddle" type="number" min="1" max="100" value="50"></label>
-            <label>Lower <input id="rsiLower" type="number" min="1" max="100" value="30"></label>
-          </div>
-          <div class="indicator-row two">
-            <label>Color <input id="rsiColor" type="color" value="#d6a93d"></label>
-            <label>Source
-              <select id="rsiSource">
-                <option value="close">Close</option>
-                <option value="hlc3">HLC3</option>
-                <option value="ohlc4">OHLC4</option>
-              </select>
-            </label>
-          </div>
-        </div>
+      <div class="tv-settings-tabs">
+        <button class="tv-settings-tab active" data-indicator-settings-tab="inputs">Inputs</button>
+        <button class="tv-settings-tab" data-indicator-settings-tab="style">Style</button>
+        <button class="tv-settings-tab" data-indicator-settings-tab="visibility">Visibility</button>
       </div>
 
-      <div id="indicatorTabWhaleX" class="indicator-tab-panel hidden">
-        <div class="indicator-section">
-          <h3>WhaleX</h3>
-          <label><input id="whaleLiquidityToggle" type="checkbox" checked> Show WhaleX Liquidity Lines</label>
-          <label><input id="orderflowPlaceholderToggle" type="checkbox"> WhaleX Orderflow Foundation</label>
-        </div>
-      </div>
+      <div id="indicatorSettingsBody" class="tv-settings-body"></div>
 
-      <div class="indicator-actions">
-        <button id="applyIndicatorsBtn">Apply</button>
-        <button id="clearIndicatorsBtn">Reset</button>
+      <div class="tv-settings-actions">
+        <button id="saveIndicatorSettingsBtn">OK</button>
+        <button id="cancelIndicatorSettingsBtn">Cancel</button>
       </div>
     </div>
   </div>

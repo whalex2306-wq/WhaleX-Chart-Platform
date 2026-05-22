@@ -1,60 +1,89 @@
-# WhaleX Chart Platform v3.2 — Indicator Menu Cache/Event Fix
+# WhaleX Chart Platform v3.3 — TV-Style Indicator Manager
 
 ## Main fix
 
-The Indicators button was still showing the old toast message:
+The previous indicator panel looked poor and behaved like one big settings form.
 
-`Indicator menu comes after drawing tools are stable`
+v3.3 changes the workflow to be closer to TradingView:
 
-That means either:
-- old `app.js` was still cached in browser, or
-- the indicator click event was not replaced correctly.
+1. Indicators button opens a compact search/list window.
+2. User adds indicators from the list.
+3. Added indicators appear as a small chart legend.
+4. Each added indicator has:
+   - show/hide
+   - settings
+   - remove
+5. Settings open separately with tabs:
+   - Inputs
+   - Style
+   - Visibility
 
-## Fixed in v3.2
+## Indicator library
 
-- Removed the old toast handler completely
-- Added `openIndicatorModal()` hard binding
-- Added direct fallback click listener on `#indicatorBtn`
-- Added cache-busting:
-  - `app.js?v=3.2.0`
-  - `styles.css?v=3.2.0`
-- Added console stamp:
-  - `WhaleX Chart Platform JS v3.2.0 loaded`
-- Guaranteed Indicator modal exists in `index.html`
+Current active indicators:
 
-## Indicator menu remains TradingView-style configurable
+- Moving Average
+- VWAP
+- Volume
+- RSI
+- WhaleX Liquidity Lines
+- WhaleX Orderflow Foundation placeholder
 
-Moving Average:
-- Show / hide
+## Moving Average settings
+
+Inputs:
 - Type: EMA / SMA / WMA
-- Length default 9, editable
-- Source
-- Color
-- Width
-- Add/delete MA rows
+- Length, default 9
+- Source: close/open/high/low/HL2/HLC3/OHLC4
 
-VWAP:
-- Show / hide
-- Source
+Style:
 - Color
-- Width
+- Line width
 
-RSI:
-- Show / hide
+Visibility:
+- Visible on/off
+
+## VWAP settings
+
+Inputs:
+- Source
+- Anchor placeholder
+
+Style:
+- Color
+- Line width
+
+Visibility:
+- Visible on/off
+
+## RSI settings
+
+Inputs:
 - Length
 - Source
-- 70 / 50 / 30 editable levels
+- Upper / Middle / Lower levels
+
+Style:
 - Color
 
-WhaleX:
-- Show/hide liquidity lines
-- Orderflow foundation placeholder
+Visibility:
+- Visible on/off
+
+## Volume
+
+Volume is now on a separate hidden price scale so it should not destroy the main price scale.
+
+## Cache
+
+Static files are cache-busted:
+- app.js?v=3.3.0
+- styles.css?v=3.3.0
 
 ## Syntax check
 
 JavaScript syntax check: PASS
 
-Stale old toast string present: False
+Stale old indicator toast present: False
 
 
 
@@ -64,8 +93,8 @@ Upload all files over the existing GitHub repo, commit, then Render:
 
 Manual Deploy -> Clear build cache & deploy.
 
-Then hard refresh the browser:
+Then hard refresh:
 - Mac: Cmd + Shift + R
 - Windows: Ctrl + F5
 
-Check `/health`; it must show version `3.2.0`.
+Check `/health`; it must show version `3.3.0`.

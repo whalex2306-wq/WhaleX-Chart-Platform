@@ -1,4 +1,4 @@
-console.log("WhaleX Chart Platform JS v3.2.0 loaded");
+console.log("WhaleX Chart Platform JS v3.3.0 loaded");
 
 const HARD = { bucket: 100, minM: 5, maxLines: 10, publishMs: 750 };
 
@@ -157,6 +157,12 @@ orderflowTag.id = "orderflowTag";
 orderflowTag.className = "orderflow-tag hidden";
 orderflowTag.textContent = "WhaleX Orderflow Foundation: POC/LVN engine next";
 shellEl.appendChild(orderflowTag);
+
+const indicatorLegend = document.createElement("div");
+indicatorLegend.id = "indicatorLegend";
+indicatorLegend.className = "indicator-legend";
+shellEl.appendChild(indicatorLegend);
+
 
 const chart = LightweightCharts.createChart(chartEl, {
   layout: {
@@ -1855,38 +1861,69 @@ canvas.addEventListener("dblclick", e => {
 
 /* ---------- Indicator foundation ---------- */
 
+const INDICATOR_LIBRARY = [
+  { kind:"ma", group:"Technicals", tab:"technical", title:"Moving Average", sub:"EMA/SMA/WMA with editable length and source", icon:"MA" },
+  { kind:"vwap", group:"Technicals", tab:"technical", title:"VWAP", sub:"Session anchored VWAP", icon:"VW" },
+  { kind:"volume", group:"Technicals", tab:"technical", title:"Volume", sub:"Volume histogram", icon:"VOL" },
+  { kind:"rsi", group:"Technicals", tab:"technical", title:"Relative Strength Index", sub:"RSI with editable length and levels", icon:"RSI" },
+  { kind:"whaleLiquidity", group:"WhaleX", tab:"whalex", title:"WhaleX Liquidity Lines", sub:"Live order-book liquidity lines", icon:"WX" },
+  { kind:"orderflowFoundation", group:"WhaleX", tab:"whalex", title:"WhaleX Orderflow Foundation", sub:"POC/LVN/HVN foundation placeholder", icon:"OF" }
+];
+
+let indicatorLibraryTab = "all";
+let activeIndicatorTarget = null;
+let activeIndicatorSettingsTab = "inputs";
+let indicatorSettingsDraft = null;
+
 function indicatorSettingsKey() {
-  return "whalex_indicator_settings_v310";
+  return "whalex_indicator_settings_v330";
+}
+
+function indicatorFavoritesKey() {
+  return "whalex_indicator_favorites_v330";
 }
 
 function defaultIndicatorSettings() {
   return {
-    ma: [
-      { enabled:false, type:"EMA", length:9, source:"close", color:"#38bdf8", width:2 }
-    ],
-    vwap:{ enabled:false, source:"hlc3", color:"#eab308", width:2, anchor:"session" },
-    volume:false,
-    rsi:{ enabled:false, length:14, source:"close", upper:70, middle:50, lower:30, color:"#d6a93d" },
+    ma: [],
+    vwap:{ enabled:false, source:"hlc3", color:"#eab308", width:2, anchor:"session", visible:true },
+    volume:{ enabled:false, visible:true, colorMode:"updown" },
+    rsi:{ enabled:false, length:14, source:"close", upper:70, middle:50, lower:30, color:"#d6a93d", visible:true },
     whaleLiquidity:true,
     orderflowFoundation:false
+  };
+}
+
+function defaultMAConfig() {
+  return {
+    enabled:true,
+    visible:true,
+    type:"EMA",
+    length:9,
+    source:"close",
+    color:["#38bdf8","#a78bfa","#f59e0b","#ef4444","#22c55e"][indicatorSettings.ma.length % 5],
+    width:2
   };
 }
 
 function normalizeIndicatorSettings(s) {
   const d = defaultIndicatorSettings();
   s = s || {};
-  const ma = Array.isArray(s.ma) ? s.ma : d.ma;
+
+  let volume = typeof s.volume === "boolean" ? { enabled:s.volume, visible:true, colorMode:"updown" } : { ...d.volume, ...(s.volume || {}) };
+
   return {
-    ma: ma.map(x => ({
-      enabled: !!x.enabled,
+    ma: Array.isArray(s.ma) ? s.ma.map(x => ({
+      enabled: x.enabled !== false,
+      visible: x.visible !== false,
       type: x.type || "EMA",
       length: Math.max(1, Number(x.length || 9)),
       source: x.source || "close",
       color: x.color || "#38bdf8",
       width: Math.max(1, Number(x.width || 2))
-    })),
+    })) : [],
     vwap: { ...d.vwap, ...(s.vwap || {}) },
-    volume: !!s.volume,
+    volume,
     rsi: { ...d.rsi, ...(s.rsi || {}) },
     whaleLiquidity: s.whaleLiquidity !== false,
     orderflowFoundation: !!s.orderflowFoundation
@@ -1900,125 +1937,354 @@ function loadIndicatorSettings() {
   } catch(e) {
     indicatorSettings = defaultIndicatorSettings();
   }
-  renderIndicatorUI();
+  updateIndicatorLegend();
 }
 
 function saveIndicatorSettings() {
   localStorage.setItem(indicatorSettingsKey(), JSON.stringify(indicatorSettings));
 }
 
-function renderIndicatorUI() {
-  renderMARows();
-
-  if (els.vwapToggle) els.vwapToggle.checked = !!indicatorSettings.vwap.enabled;
-  if (els.vwapSource) els.vwapSource.value = indicatorSettings.vwap.source || "hlc3";
-  if (els.vwapColor) els.vwapColor.value = indicatorSettings.vwap.color || "#eab308";
-  if (els.vwapWidth) els.vwapWidth.value = indicatorSettings.vwap.width || 2;
-  if (els.vwapAnchor) els.vwapAnchor.value = indicatorSettings.vwap.anchor || "session";
-
-  if (els.volumeToggle) els.volumeToggle.checked = !!indicatorSettings.volume;
-
-  if (els.rsiToggle) els.rsiToggle.checked = !!indicatorSettings.rsi.enabled;
-  if (els.rsiLength) els.rsiLength.value = indicatorSettings.rsi.length || 14;
-  if (els.rsiUpper) els.rsiUpper.value = indicatorSettings.rsi.upper || 70;
-  if (els.rsiMiddle) els.rsiMiddle.value = indicatorSettings.rsi.middle || 50;
-  if (els.rsiLower) els.rsiLower.value = indicatorSettings.rsi.lower || 30;
-  if (els.rsiColor) els.rsiColor.value = indicatorSettings.rsi.color || "#d6a93d";
-  if (els.rsiSource) els.rsiSource.value = indicatorSettings.rsi.source || "close";
-
-  if (els.whaleLiquidityToggle) els.whaleLiquidityToggle.checked = indicatorSettings.whaleLiquidity !== false;
-  if (els.orderflowPlaceholderToggle) els.orderflowPlaceholderToggle.checked = !!indicatorSettings.orderflowFoundation;
+function getIndicatorFavorites() {
+  try { return new Set(JSON.parse(localStorage.getItem(indicatorFavoritesKey()) || "[]")); }
+  catch(e) { return new Set(); }
 }
 
-function renderMARows() {
-  if (!els.maRows) return;
-  els.maRows.innerHTML = "";
-  indicatorSettings.ma.forEach((row, idx) => {
-    const div = document.createElement("div");
-    div.className = "ma-row";
-    div.innerHTML = `
-      <input type="checkbox" data-ma="${idx}" data-field="enabled" ${row.enabled ? "checked" : ""} title="Show">
-      <select data-ma="${idx}" data-field="type">
-        <option value="EMA">EMA</option>
-        <option value="SMA">SMA</option>
-        <option value="WMA">WMA</option>
-      </select>
-      <input type="number" min="1" max="1000" data-ma="${idx}" data-field="length" value="${row.length || 9}" title="Length">
-      <select data-ma="${idx}" data-field="source">
-        <option value="close">Close</option>
-        <option value="open">Open</option>
-        <option value="high">High</option>
-        <option value="low">Low</option>
-        <option value="hl2">HL2</option>
-        <option value="hlc3">HLC3</option>
-        <option value="ohlc4">OHLC4</option>
-      </select>
-      <input type="color" data-ma="${idx}" data-field="color" value="${row.color || "#38bdf8"}" title="Color">
-      <input type="number" min="1" max="6" data-ma="${idx}" data-field="width" value="${row.width || 2}" title="Width">
-      <button class="ma-delete-btn" data-ma-delete="${idx}" title="Delete">×</button>
+function saveIndicatorFavorites(set) {
+  localStorage.setItem(indicatorFavoritesKey(), JSON.stringify([...set]));
+}
+
+function openIndicatorModal() {
+  loadIndicatorSettings();
+  indicatorLibraryTab = "all";
+  const search = document.getElementById("indicatorSearchInput");
+  if (search) search.value = "";
+  document.querySelectorAll(".tv-indicator-tab").forEach(b => b.classList.toggle("active", b.dataset.libraryTab === "all"));
+  renderIndicatorLibrary();
+  document.getElementById("indicatorModal")?.classList.remove("hidden");
+  setTimeout(() => document.getElementById("indicatorSearchInput")?.focus(), 60);
+}
+
+function closeIndicatorModal() {
+  document.getElementById("indicatorModal")?.classList.add("hidden");
+}
+
+function renderIndicatorLibrary() {
+  const list = document.getElementById("indicatorLibraryList");
+  if (!list) return;
+
+  const q = (document.getElementById("indicatorSearchInput")?.value || "").toLowerCase().trim();
+  const favs = getIndicatorFavorites();
+
+  let items = INDICATOR_LIBRARY.filter(x => {
+    if (indicatorLibraryTab === "favorites" && !favs.has(x.kind)) return false;
+    if (indicatorLibraryTab !== "all" && indicatorLibraryTab !== "favorites" && x.tab !== indicatorLibraryTab) return false;
+    if (q && !(x.title.toLowerCase().includes(q) || x.sub.toLowerCase().includes(q) || x.kind.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  list.innerHTML = "";
+  if (!items.length) {
+    list.innerHTML = `<div class="tv-indicator-section-title">No indicators found</div>`;
+    return;
+  }
+
+  let lastGroup = "";
+  items.forEach(item => {
+    if (item.group !== lastGroup) {
+      const h = document.createElement("div");
+      h.className = "tv-indicator-section-title";
+      h.textContent = item.group;
+      list.appendChild(h);
+      lastGroup = item.group;
+    }
+
+    const btn = document.createElement("button");
+    btn.className = "tv-indicator-item";
+    btn.innerHTML = `
+      <span class="tv-indicator-item-icon">${item.icon}</span>
+      <span>
+        <div class="tv-indicator-item-title">${item.title}</div>
+        <div class="tv-indicator-item-sub">${item.sub}</div>
+      </span>
+      <span class="tv-indicator-star ${favs.has(item.kind) ? "active" : ""}" title="Favorite">★</span>
     `;
-    els.maRows.appendChild(div);
-    div.querySelector(`[data-field="type"]`).value = row.type || "EMA";
-    div.querySelector(`[data-field="source"]`).value = row.source || "close";
-  });
-
-  els.maRows.querySelectorAll("[data-ma]").forEach(input => {
-    const evt = input.type === "checkbox" || input.tagName === "SELECT" ? "change" : "input";
-    input.addEventListener(evt, () => {
-      const idx = Number(input.dataset.ma);
-      const field = input.dataset.field;
-      if (!indicatorSettings.ma[idx]) return;
-      if (input.type === "checkbox") indicatorSettings.ma[idx][field] = input.checked;
-      else if (input.type === "number") indicatorSettings.ma[idx][field] = Math.max(1, Number(input.value || 1));
-      else indicatorSettings.ma[idx][field] = input.value;
-    });
-  });
-
-  els.maRows.querySelectorAll("[data-ma-delete]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = Number(btn.dataset.maDelete);
-      indicatorSettings.ma.splice(idx,1);
-      if (!indicatorSettings.ma.length) indicatorSettings.ma.push({ enabled:false, type:"EMA", length:9, source:"close", color:"#38bdf8", width:2 });
-      renderMARows();
-    });
+    btn.onclick = (e) => {
+      if (e.target.classList.contains("tv-indicator-star")) {
+        const f = getIndicatorFavorites();
+        if (f.has(item.kind)) f.delete(item.kind); else f.add(item.kind);
+        saveIndicatorFavorites(f);
+        renderIndicatorLibrary();
+        e.stopPropagation();
+        return;
+      }
+      addIndicator(item.kind);
+    };
+    list.appendChild(btn);
   });
 }
 
-function addMARow() {
-  indicatorSettings.ma.push({
-    enabled:true,
-    type:"EMA",
-    length:9,
-    source:"close",
-    color:["#38bdf8","#a78bfa","#f59e0b","#ef4444","#22c55e"][indicatorSettings.ma.length % 5],
-    width:2
-  });
-  renderMARows();
-}
+function addIndicator(kind) {
+  loadIndicatorSettings();
 
-function collectIndicatorSettings() {
-  // MA rows already sync live from input handlers; collect other panels here.
-  indicatorSettings.vwap = {
-    enabled: !!els.vwapToggle?.checked,
-    source: els.vwapSource?.value || "hlc3",
-    color: els.vwapColor?.value || "#eab308",
-    width: Number(els.vwapWidth?.value || 2),
-    anchor: els.vwapAnchor?.value || "session"
-  };
-  indicatorSettings.volume = !!els.volumeToggle?.checked;
-  indicatorSettings.rsi = {
-    enabled: !!els.rsiToggle?.checked,
-    length: Math.max(1, Number(els.rsiLength?.value || 14)),
-    source: els.rsiSource?.value || "close",
-    upper: Number(els.rsiUpper?.value || 70),
-    middle: Number(els.rsiMiddle?.value || 50),
-    lower: Number(els.rsiLower?.value || 30),
-    color: els.rsiColor?.value || "#d6a93d"
-  };
-  indicatorSettings.whaleLiquidity = els.whaleLiquidityToggle?.checked !== false;
-  indicatorSettings.orderflowFoundation = !!els.orderflowPlaceholderToggle?.checked;
-  indicatorSettings = normalizeIndicatorSettings(indicatorSettings);
+  if (kind === "ma") indicatorSettings.ma.push(defaultMAConfig());
+  if (kind === "vwap") indicatorSettings.vwap.enabled = true;
+  if (kind === "volume") indicatorSettings.volume = { ...indicatorSettings.volume, enabled:true, visible:true };
+  if (kind === "rsi") indicatorSettings.rsi = { ...indicatorSettings.rsi, enabled:true, visible:true };
+  if (kind === "whaleLiquidity") indicatorSettings.whaleLiquidity = true;
+  if (kind === "orderflowFoundation") indicatorSettings.orderflowFoundation = true;
+
   saveIndicatorSettings();
+  redrawIndicators();
+  redrawLiquidity();
+  updateIndicatorLegend();
+  closeIndicatorModal();
+  toast(`${libraryTitle(kind)} added`);
+}
+
+function libraryTitle(kind) {
+  return INDICATOR_LIBRARY.find(x => x.kind === kind)?.title || kind;
+}
+
+function indicatorDisplayName(kind, idx=null) {
+  if (kind === "ma") {
+    const cfg = indicatorSettings.ma[idx];
+    return `${cfg.type} ${cfg.length} ${sourceLabel(cfg.source)}`;
+  }
+  if (kind === "vwap") return `VWAP ${sourceLabel(indicatorSettings.vwap.source)}`;
+  if (kind === "volume") return "Volume";
+  if (kind === "rsi") return `RSI ${indicatorSettings.rsi.length}`;
+  if (kind === "whaleLiquidity") return "WhaleX Liquidity";
+  if (kind === "orderflowFoundation") return "WhaleX Orderflow";
+  return kind;
+}
+
+function sourceLabel(src) {
+  return ({close:"close", open:"open", high:"high", low:"low", hl2:"HL2", hlc3:"HLC3", ohlc4:"OHLC4"}[src] || src || "close");
+}
+
+function activeIndicators() {
+  const out = [];
+  indicatorSettings.ma.forEach((cfg, idx) => {
+    if (cfg.enabled) out.push({ kind:"ma", idx, visible:cfg.visible !== false, color:cfg.color });
+  });
+  if (indicatorSettings.vwap.enabled) out.push({ kind:"vwap", visible:indicatorSettings.vwap.visible !== false, color:indicatorSettings.vwap.color });
+  if (indicatorSettings.volume.enabled) out.push({ kind:"volume", visible:indicatorSettings.volume.visible !== false, color:"#64748b" });
+  if (indicatorSettings.rsi.enabled) out.push({ kind:"rsi", visible:indicatorSettings.rsi.visible !== false, color:indicatorSettings.rsi.color });
+  if (indicatorSettings.whaleLiquidity) out.push({ kind:"whaleLiquidity", visible:true, color:"#22c55e" });
+  if (indicatorSettings.orderflowFoundation) out.push({ kind:"orderflowFoundation", visible:true, color:"#d6a93d" });
+  return out;
+}
+
+function updateIndicatorLegend() {
+  if (!indicatorLegend) return;
+  indicatorLegend.innerHTML = "";
+  activeIndicators().forEach(item => {
+    const row = document.createElement("div");
+    row.className = "indicator-legend-row";
+    const visibleIcon = item.visible ? "👁" : "🙈";
+    row.innerHTML = `
+      <button class="indicator-legend-btn" data-act="toggle">${visibleIcon}</button>
+      <span class="indicator-legend-name" style="color:${item.color || "#cbd5e1"}">${indicatorDisplayName(item.kind,item.idx)}</span>
+      <button class="indicator-legend-btn" data-act="settings">⚙</button>
+      <button class="indicator-legend-btn" data-act="remove">×</button>
+    `;
+    row.querySelector('[data-act="toggle"]').onclick = () => toggleIndicatorVisibility(item.kind,item.idx);
+    row.querySelector('[data-act="settings"]').onclick = () => openIndicatorSettings(item.kind,item.idx);
+    row.querySelector('[data-act="remove"]').onclick = () => removeIndicator(item.kind,item.idx);
+    indicatorLegend.appendChild(row);
+  });
+}
+
+function toggleIndicatorVisibility(kind, idx=null) {
+  if (kind === "ma") indicatorSettings.ma[idx].visible = indicatorSettings.ma[idx].visible === false;
+  if (kind === "vwap") indicatorSettings.vwap.visible = indicatorSettings.vwap.visible === false;
+  if (kind === "volume") indicatorSettings.volume.visible = indicatorSettings.volume.visible === false;
+  if (kind === "rsi") indicatorSettings.rsi.visible = indicatorSettings.rsi.visible === false;
+  saveIndicatorSettings();
+  redrawIndicators();
+  updateIndicatorLegend();
+}
+
+function removeIndicator(kind, idx=null) {
+  if (kind === "ma") indicatorSettings.ma.splice(idx,1);
+  if (kind === "vwap") indicatorSettings.vwap.enabled = false;
+  if (kind === "volume") indicatorSettings.volume.enabled = false;
+  if (kind === "rsi") indicatorSettings.rsi.enabled = false;
+  if (kind === "whaleLiquidity") indicatorSettings.whaleLiquidity = false;
+  if (kind === "orderflowFoundation") indicatorSettings.orderflowFoundation = false;
+  saveIndicatorSettings();
+  redrawIndicators();
+  redrawLiquidity();
+  updateIndicatorLegend();
+}
+
+function cloneIndicatorConfig(kind, idx=null) {
+  if (kind === "ma") return JSON.parse(JSON.stringify(indicatorSettings.ma[idx]));
+  if (kind === "vwap") return JSON.parse(JSON.stringify(indicatorSettings.vwap));
+  if (kind === "volume") return JSON.parse(JSON.stringify(indicatorSettings.volume));
+  if (kind === "rsi") return JSON.parse(JSON.stringify(indicatorSettings.rsi));
+  if (kind === "whaleLiquidity") return { enabled:indicatorSettings.whaleLiquidity };
+  if (kind === "orderflowFoundation") return { enabled:indicatorSettings.orderflowFoundation };
+  return {};
+}
+
+function openIndicatorSettings(kind, idx=null) {
+  activeIndicatorTarget = { kind, idx };
+  indicatorSettingsDraft = cloneIndicatorConfig(kind,idx);
+  activeIndicatorSettingsTab = "inputs";
+  document.getElementById("indicatorSettingsTitle").textContent = indicatorDisplayName(kind,idx) + " Settings";
+  document.querySelectorAll(".tv-settings-tab").forEach(b => b.classList.toggle("active", b.dataset.indicatorSettingsTab === "inputs"));
+  renderIndicatorSettingsBody();
+  document.getElementById("indicatorSettingsModal")?.classList.remove("hidden");
+}
+
+function closeIndicatorSettingsModal() {
+  document.getElementById("indicatorSettingsModal")?.classList.add("hidden");
+  indicatorSettingsDraft = null;
+  activeIndicatorTarget = null;
+}
+
+function settingRow(label, inputHtml) {
+  return `<div class="tv-setting-row"><label>${label}</label><div>${inputHtml}</div></div>`;
+}
+
+function renderIndicatorSettingsBody() {
+  const body = document.getElementById("indicatorSettingsBody");
+  if (!body || !activeIndicatorTarget || !indicatorSettingsDraft) return;
+  const { kind } = activeIndicatorTarget;
+  const cfg = indicatorSettingsDraft;
+  const tab = activeIndicatorSettingsTab;
+  let html = "";
+
+  if (kind === "ma") {
+    if (tab === "inputs") {
+      html += settingRow("Type", `<select data-field="type"><option value="EMA">EMA</option><option value="SMA">SMA</option><option value="WMA">WMA</option></select>`);
+      html += settingRow("Length", `<input data-field="length" type="number" min="1" max="1000" value="${cfg.length || 9}">`);
+      html += settingRow("Source", sourceSelect(cfg.source));
+    }
+    if (tab === "style") {
+      html += settingRow("Color", `<input data-field="color" type="color" value="${cfg.color || "#38bdf8"}">`);
+      html += settingRow("Line width", `<input data-field="width" type="number" min="1" max="6" value="${cfg.width || 2}">`);
+    }
+    if (tab === "visibility") {
+      html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
+    }
+  }
+
+  if (kind === "vwap") {
+    if (tab === "inputs") {
+      html += settingRow("Source", sourceSelect(cfg.source || "hlc3", ["hlc3","close","ohlc4"]));
+      html += settingRow("Anchor", `<select data-field="anchor"><option value="session">Session / Day</option></select>`);
+    }
+    if (tab === "style") {
+      html += settingRow("Color", `<input data-field="color" type="color" value="${cfg.color || "#eab308"}">`);
+      html += settingRow("Line width", `<input data-field="width" type="number" min="1" max="6" value="${cfg.width || 2}">`);
+    }
+    if (tab === "visibility") {
+      html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
+    }
+  }
+
+  if (kind === "volume") {
+    if (tab === "inputs") html += settingRow("Show volume", `<input data-field="enabled" type="checkbox" ${cfg.enabled !== false ? "checked" : ""}>`);
+    if (tab === "style") html += settingRow("Color mode", `<select data-field="colorMode"><option value="updown">Up/Down</option><option value="single">Single</option></select>`);
+    if (tab === "visibility") html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
+  }
+
+  if (kind === "rsi") {
+    if (tab === "inputs") {
+      html += settingRow("Length", `<input data-field="length" type="number" min="1" max="200" value="${cfg.length || 14}">`);
+      html += settingRow("Source", sourceSelect(cfg.source || "close", ["close","hlc3","ohlc4"]));
+      html += settingRow("Upper level", `<input data-field="upper" type="number" min="1" max="100" value="${cfg.upper || 70}">`);
+      html += settingRow("Middle level", `<input data-field="middle" type="number" min="1" max="100" value="${cfg.middle || 50}">`);
+      html += settingRow("Lower level", `<input data-field="lower" type="number" min="1" max="100" value="${cfg.lower || 30}">`);
+    }
+    if (tab === "style") {
+      html += settingRow("Color", `<input data-field="color" type="color" value="${cfg.color || "#d6a93d"}">`);
+    }
+    if (tab === "visibility") {
+      html += settingRow("Visible", `<input data-field="visible" type="checkbox" ${cfg.visible !== false ? "checked" : ""}>`);
+    }
+  }
+
+  if (kind === "whaleLiquidity" || kind === "orderflowFoundation") {
+    html += settingRow("Enabled", `<input data-field="enabled" type="checkbox" ${cfg.enabled !== false ? "checked" : ""}>`);
+  }
+
+  body.innerHTML = html;
+  body.querySelectorAll("select[data-field]").forEach(el => {
+    const field = el.dataset.field;
+    if (cfg[field] !== undefined) el.value = cfg[field];
+  });
+  body.querySelectorAll("[data-field]").forEach(el => {
+    const evt = el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input";
+    el.addEventListener(evt, () => {
+      const field = el.dataset.field;
+      if (el.type === "checkbox") cfg[field] = el.checked;
+      else if (el.type === "number") cfg[field] = Number(el.value);
+      else cfg[field] = el.value;
+    });
+  });
+}
+
+function sourceSelect(value="close", allowed=["close","open","high","low","hl2","hlc3","ohlc4"]) {
+  const labels = { close:"Close", open:"Open", high:"High", low:"Low", hl2:"HL2", hlc3:"HLC3", ohlc4:"OHLC4" };
+  return `<select data-field="source">${allowed.map(v => `<option value="${v}" ${v===value ? "selected" : ""}>${labels[v]}</option>`).join("")}</select>`;
+}
+
+function saveActiveIndicatorSettings() {
+  if (!activeIndicatorTarget || !indicatorSettingsDraft) return;
+  const { kind, idx } = activeIndicatorTarget;
+  const cfg = normalizeOneIndicator(kind, indicatorSettingsDraft);
+
+  if (kind === "ma") indicatorSettings.ma[idx] = cfg;
+  if (kind === "vwap") indicatorSettings.vwap = { ...indicatorSettings.vwap, ...cfg, enabled:true };
+  if (kind === "volume") indicatorSettings.volume = { ...indicatorSettings.volume, ...cfg, enabled:cfg.enabled !== false };
+  if (kind === "rsi") indicatorSettings.rsi = { ...indicatorSettings.rsi, ...cfg, enabled:true };
+  if (kind === "whaleLiquidity") indicatorSettings.whaleLiquidity = cfg.enabled !== false;
+  if (kind === "orderflowFoundation") indicatorSettings.orderflowFoundation = cfg.enabled !== false;
+
+  saveIndicatorSettings();
+  redrawIndicators();
+  redrawLiquidity();
+  updateIndicatorLegend();
+  closeIndicatorSettingsModal();
+}
+
+function normalizeOneIndicator(kind, cfg) {
+  if (kind === "ma") return {
+    enabled:true,
+    visible:cfg.visible !== false,
+    type:cfg.type || "EMA",
+    length:Math.max(1, Number(cfg.length || 9)),
+    source:cfg.source || "close",
+    color:cfg.color || "#38bdf8",
+    width:Math.max(1, Number(cfg.width || 2))
+  };
+  if (kind === "vwap") return {
+    enabled:true,
+    visible:cfg.visible !== false,
+    source:cfg.source || "hlc3",
+    color:cfg.color || "#eab308",
+    width:Math.max(1, Number(cfg.width || 2)),
+    anchor:cfg.anchor || "session"
+  };
+  if (kind === "rsi") return {
+    enabled:true,
+    visible:cfg.visible !== false,
+    length:Math.max(1, Number(cfg.length || 14)),
+    source:cfg.source || "close",
+    upper:Number(cfg.upper || 70),
+    middle:Number(cfg.middle || 50),
+    lower:Number(cfg.lower || 30),
+    color:cfg.color || "#d6a93d"
+  };
+  if (kind === "volume") return {
+    enabled:cfg.enabled !== false,
+    visible:cfg.visible !== false,
+    colorMode:cfg.colorMode || "updown"
+  };
+  return cfg;
 }
 
 function priceSource(c, source) {
@@ -2052,9 +2318,7 @@ function maData(data, cfg) {
     const denom = period * (period + 1) / 2;
     for (let i=period-1; i<data.length; i++) {
       let weighted = 0;
-      for (let j=0; j<period; j++) {
-        weighted += priceSource(data[i-j],cfg.source) * (period-j);
-      }
+      for (let j=0; j<period; j++) weighted += priceSource(data[i-j],cfg.source) * (period-j);
       out.push({ time:data[i].time, value:weighted/denom });
     }
     return out;
@@ -2074,11 +2338,7 @@ function vwapData(data) {
   const src = indicatorSettings.vwap.source || "hlc3";
   return data.map(c => {
     const d = new Date(c.time * 1000).toISOString().slice(0,10);
-    if (d !== currentDay) {
-      currentDay = d;
-      cumPV = 0;
-      cumV = 0;
-    }
+    if (d !== currentDay) { currentDay = d; cumPV = 0; cumV = 0; }
     const p = priceSource(c,src);
     const vol = Math.max(0,c.volume || 0);
     cumPV += p * vol;
@@ -2099,26 +2359,19 @@ function rsiData(data, period=14) {
   let avgGain = gains / period, avgLoss = losses / period;
   for (let i=period+1; i<data.length; i++) {
     const ch = priceSource(data[i],src) - priceSource(data[i-1],src);
-    const gain = Math.max(ch, 0);
-    const loss = Math.max(-ch, 0);
-    avgGain = (avgGain * (period - 1) + gain) / period;
-    avgLoss = (avgLoss * (period - 1) + loss) / period;
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    const rsi = 100 - (100 / (1 + rs));
-    out.push({ time:data[i].time, value:rsi });
+    const gain = Math.max(ch,0), loss = Math.max(-ch,0);
+    avgGain = (avgGain*(period-1)+gain)/period;
+    avgLoss = (avgLoss*(period-1)+loss)/period;
+    const rs = avgLoss === 0 ? 100 : avgGain/avgLoss;
+    out.push({ time:data[i].time, value:100 - (100/(1+rs)) });
   }
   return out;
 }
 
 function clearIndicatorSeries() {
-  Object.values(indicatorSeries).forEach(s => {
-    try { chart.removeSeries(s); } catch(e) {}
-  });
+  Object.values(indicatorSeries).forEach(s => { try { chart.removeSeries(s); } catch(e) {} });
   indicatorSeries = {};
-  if (volumeSeries) {
-    try { chart.removeSeries(volumeSeries); } catch(e) {}
-    volumeSeries = null;
-  }
+  if (volumeSeries) { try { chart.removeSeries(volumeSeries); } catch(e) {}; volumeSeries = null; }
   drawRSI();
 }
 
@@ -2126,7 +2379,7 @@ function addLineIndicator(key, data, color, width=2) {
   try {
     indicatorSeries[key] = chart.addLineSeries({
       color,
-      lineWidth: Math.max(1, Number(width || 2)),
+      lineWidth:Math.max(1,Number(width || 2)),
       priceLineVisible:false,
       lastValueVisible:true
     });
@@ -2136,39 +2389,41 @@ function addLineIndicator(key, data, color, width=2) {
 
 function redrawIndicators() {
   clearIndicatorSeries();
-  if (!rawCandles.length) return;
+  if (!rawCandles.length) { updateIndicatorLegend(); return; }
 
-  indicatorSettings.ma.forEach((cfg, idx) => {
-    if (cfg.enabled) addLineIndicator(`ma${idx}`, maData(rawCandles,cfg), cfg.color, cfg.width);
+  indicatorSettings.ma.forEach((cfg,idx) => {
+    if (cfg.enabled && cfg.visible !== false) addLineIndicator(`ma${idx}`, maData(rawCandles,cfg), cfg.color, cfg.width);
   });
 
-  if (indicatorSettings.vwap.enabled) {
+  if (indicatorSettings.vwap.enabled && indicatorSettings.vwap.visible !== false) {
     addLineIndicator("vwap", vwapData(rawCandles), indicatorSettings.vwap.color, indicatorSettings.vwap.width);
   }
 
-  if (indicatorSettings.volume) {
+  if (indicatorSettings.volume.enabled && indicatorSettings.volume.visible !== false) {
     try {
       volumeSeries = chart.addHistogramSeries({
-        color:"#64748b",
         priceFormat:{type:"volume"},
-        priceScaleId:"",
-        scaleMargins:{top:0.82,bottom:0}
+        priceScaleId:"volume",
+        priceLineVisible:false,
+        lastValueVisible:false
       });
+      chart.priceScale("volume").applyOptions({ visible:false, scaleMargins:{ top:0.82, bottom:0 } });
       volumeSeries.setData(rawCandles.map(c => ({
         time:c.time,
         value:c.volume || 0,
-        color:c.close >= c.open ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"
+        color:c.close >= c.open ? "rgba(34,197,94,.28)" : "rgba(239,68,68,.28)"
       })));
     } catch(e) {}
   }
 
   drawRSI();
   if (orderflowTag) orderflowTag.classList.toggle("hidden", !indicatorSettings.orderflowFoundation);
+  updateIndicatorLegend();
 }
 
 function drawRSI() {
-  rsiPanel.classList.toggle("hidden", !indicatorSettings.rsi.enabled);
-  if (!indicatorSettings.rsi.enabled || !rawCandles.length) return;
+  rsiPanel.classList.toggle("hidden", !(indicatorSettings.rsi.enabled && indicatorSettings.rsi.visible !== false));
+  if (!(indicatorSettings.rsi.enabled && indicatorSettings.rsi.visible !== false) || !rawCandles.length) return;
 
   const rect = rsiPanel.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -2179,25 +2434,21 @@ function drawRSI() {
   rsiCtx.setTransform(dpr,0,0,dpr,0,0);
   rsiCtx.clearRect(0,0,rect.width,rect.height);
 
-  const period = Math.max(1, Number(indicatorSettings.rsi.length || 14));
-  const data = rsiData(rawCandles, period).slice(-160);
+  const period = Math.max(1,Number(indicatorSettings.rsi.length || 14));
+  const data = rsiData(rawCandles,period).slice(-160);
   if (!data.length) return;
 
   const padL = 36, padR = 10, padT = 16, padB = 14;
-  const w = rect.width - padL - padR;
-  const h = rect.height - padT - padB;
-
-  function yFor(v) { return padT + (100-v)/100*h; }
-  function xFor(i) { return padL + (i/Math.max(1,data.length-1))*w; }
+  const w = rect.width-padL-padR, h = rect.height-padT-padB;
+  const yFor = v => padT + (100-v)/100*h;
+  const xFor = i => padL + (i/Math.max(1,data.length-1))*w;
 
   rsiCtx.strokeStyle = "rgba(148,163,184,.35)";
   rsiCtx.lineWidth = 1;
   [indicatorSettings.rsi.upper, indicatorSettings.rsi.middle, indicatorSettings.rsi.lower].forEach(v => {
     const y = yFor(Number(v));
     rsiCtx.beginPath(); rsiCtx.moveTo(padL,y); rsiCtx.lineTo(rect.width-padR,y); rsiCtx.stroke();
-    rsiCtx.fillStyle = "#94a3b8";
-    rsiCtx.font = "11px Inter, Arial";
-    rsiCtx.fillText(String(v), 8, y+3);
+    rsiCtx.fillStyle = "#94a3b8"; rsiCtx.font = "11px Inter, Arial"; rsiCtx.fillText(String(v),8,y+3);
   });
 
   rsiCtx.strokeStyle = indicatorSettings.rsi.color || "#d6a93d";
@@ -2344,37 +2595,28 @@ els.showTitleRow.onchange = () => {
 els.chartType.onchange = () => makeSeries(els.chartType.value);
 els.indicatorBtn.onclick = () => openIndicatorModal();
 document.getElementById("indicatorBtn")?.addEventListener("click", openIndicatorModal);
-if (els.closeIndicatorModal) els.closeIndicatorModal.onclick = () => closeIndicatorModal();
-if (els.addMARowBtn) els.addMARowBtn.onclick = () => addMARow();
 
-document.querySelectorAll(".indicator-tab").forEach(btn => {
+document.getElementById("closeIndicatorModal")?.addEventListener("click", closeIndicatorModal);
+document.getElementById("indicatorSearchInput")?.addEventListener("input", renderIndicatorLibrary);
+document.querySelectorAll(".tv-indicator-tab").forEach(btn => {
   btn.onclick = () => {
-    document.querySelectorAll(".indicator-tab").forEach(b => b.classList.toggle("active", b === btn));
-    const tab = btn.dataset.tab;
-    document.querySelectorAll(".indicator-tab-panel").forEach(panel => panel.classList.add("hidden"));
-    const panel = document.getElementById("indicatorTab" + tab.toUpperCase().replace("MA","MA"));
-    if (tab === "ma") document.getElementById("indicatorTabMA")?.classList.remove("hidden");
-    if (tab === "vwap") document.getElementById("indicatorTabVWAP")?.classList.remove("hidden");
-    if (tab === "momentum") document.getElementById("indicatorTabMomentum")?.classList.remove("hidden");
-    if (tab === "whalex") document.getElementById("indicatorTabWhaleX")?.classList.remove("hidden");
+    indicatorLibraryTab = btn.dataset.libraryTab || "all";
+    document.querySelectorAll(".tv-indicator-tab").forEach(b => b.classList.toggle("active", b === btn));
+    renderIndicatorLibrary();
   };
 });
 
-if (els.applyIndicatorsBtn) els.applyIndicatorsBtn.onclick = () => {
-  collectIndicatorSettings();
-  redrawIndicators();
-  redrawLiquidity();
-  els.indicatorModal.classList.add("hidden");
-  toast("Indicators updated");
-};
-if (els.clearIndicatorsBtn) els.clearIndicatorsBtn.onclick = () => {
-  indicatorSettings = defaultIndicatorSettings();
-  saveIndicatorSettings();
-  renderIndicatorUI();
-  redrawIndicators();
-  redrawLiquidity();
-  toast("Indicators reset");
-};
+document.getElementById("closeIndicatorSettingsModal")?.addEventListener("click", closeIndicatorSettingsModal);
+document.getElementById("cancelIndicatorSettingsBtn")?.addEventListener("click", closeIndicatorSettingsModal);
+document.getElementById("saveIndicatorSettingsBtn")?.addEventListener("click", saveActiveIndicatorSettings);
+document.querySelectorAll(".tv-settings-tab").forEach(btn => {
+  btn.onclick = () => {
+    activeIndicatorSettingsTab = btn.dataset.indicatorSettingsTab || "inputs";
+    document.querySelectorAll(".tv-settings-tab").forEach(b => b.classList.toggle("active", b === btn));
+    renderIndicatorSettingsBody();
+  };
+});
+
 els.alertBtn.onclick = () => toast("Liquidity toast alerts are active");
 
 const toolButtons = {
